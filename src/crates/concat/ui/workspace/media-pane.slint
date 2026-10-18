@@ -14,6 +14,8 @@ import { Wave } from "../primitives/wave.slint";
 import { ContextMenu, MenuItemData } from "../primitives/context-menu.slint";
 import { SourcePreview } from "source-preview.slint";
 import { Sounds, SoundList, VoiceList } from "audio-page.slint";
+// CapyCut: badges and emoji, under the figures on the Stickers page.
+import { StickerGrid } from "sticker-shelf.slint";
 
 export { SourcePreview }
 
@@ -1758,6 +1760,8 @@ export component MediaPane inherits Rectangle {
     /// Stickers page: add the figure `shape` names at the playhead, as a
     /// clip called `label`.
     callback add-shape(shape: string, label: string);
+    /// CapyCut: a sticker card - "badge:SUBSCRIBE", "emoji:😀".
+    callback add-sticker(id: string);
     /// Catalogue pages: apply to the selected clip; Rust validates & explains.
     callback apply-effect(effect-id: string);
     callback apply-transition(transition-id: string);
@@ -2647,12 +2651,17 @@ export component MediaPane inherits Rectangle {
 
                 // The figures. Each card is one shape, placed at the
                 // playhead on a click or dragged onto a lane.
-                if root.tab == 2: HorizontalLayout {
+                if root.tab == 2: VerticalLayout {
                     padding: 8px;
 
                     ShapeGrid {
                         horizontal-stretch: 1;
                         placed(shape, label) => { root.add-shape(shape, label); }
+                    }
+
+                    // CapyCut: the badges and emoji, under the figures.
+                    StickerGrid {
+                        placed(id) => { root.add-sticker(id); }
                     }
                 }
 

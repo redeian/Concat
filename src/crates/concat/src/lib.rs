@@ -876,6 +876,10 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
             state.place_at_playhead(&format!("shape:{shape}:{label}"));
         }
     ));
+    // CapyCut: a badge or an emoji from the Stickers page.
+    editor.on_library_add_sticker(on_window!(|state, id: SharedString| {
+        state.place_sticker(id.as_str());
+    }));
     // A filter is a layer over a span of the timeline; an effect goes on
     // the selected clip's chain, and audio on the sound's.
     editor.on_library_apply_filter(on_window!(

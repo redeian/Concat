@@ -101,6 +101,8 @@ const LANE_SMALL: f32 = 44.0;
 /// How long a title runs when it is placed: long enough to read, short
 /// enough that trimming it is a nudge rather than a fight.
 const LAYER_DURATION: f32 = 3.0;
+// CapyCut: the plate a badge is painted on, before anyone recolours it.
+const BADGE_FILL: &str = "#FF0033";
 
 /// One media item's filmstrip, as the lanes tile it.
 pub struct Strip {
@@ -11899,6 +11901,77 @@ impl Studio {
             stroke_width,
             size: None,
         });
+    }
+
+    /// Places one of the sticker shelf's cards at the playhead.
+    ///
+    /// An emoji is a title whose words are the emoji: the interface draws
+    /// emoji from a COLR face, so there is no asset to ship and nothing to
+    /// download - the same machinery a Thai title already uses. A badge is the
+    /// pill from the Shapes shelf with its word laid on top, which is two clips
+    /// and one `Batch`, so one click is one undo step.
+    pub fn place_sticker(&mut self, id: &str) {
+        let Some((kind, name)) = id.split_once(':') else {
+            return;
+        };
+        let name = name.trim();
+        if name.is_empty() {
+            return;
+        }
+        self.flush_commit();
+        let start = f64::from(self.playhead);
+        let duration = f64::from(LAYER_DURATION);
+        match kind {
+            "emoji" => {
+                let style = model::TextStyle {
+                    content: name.to_owned(),
+                    font_size: 0.32,
+                    ..model::TextStyle::default()
+                };
+                self.apply(Command::AddTextClip {
+                    track_id: None,
+                    above: true,
+                    start,
+                    style: Some(style),
+                    duration: Some(duration),
+                    offset_y: None,
+                });
+            }
+            "badge" => {
+                let plate = model::ShapeStyle {
+                    fill: BADGE_FILL.to_owned(),
+                    ..model::ShapeStyle::of(model::ShapeKind::Pill)
+                };
+                let words = model::TextStyle {
+                    content: name.to_owned(),
+                    font_size: 0.085,
+                    font_weight: 700.0,
+                    color: "#ffffff".to_owned(),
+                    ..model::TextStyle::default()
+                };
+                self.apply(Command::Batch {
+                    commands: vec![
+                        Command::AddShapeClip {
+                            track_id: None,
+                            above: true,
+                            start,
+                            style: Some(plate),
+                            duration: Some(duration),
+                            name: name.to_owned(),
+                        },
+                        Command::AddTextClip {
+                            track_id: None,
+                            above: true,
+                            start,
+                            style: Some(words),
+                            duration: Some(duration),
+                            offset_y: None,
+                        },
+                    ],
+                });
+            }
+            _ => {}
+        }
     }
 
     /// Sets one of the four knobs *Remove silence* cuts with, and remembers it.

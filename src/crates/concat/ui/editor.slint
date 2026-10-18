@@ -114,6 +114,9 @@ export global Editor {
     /// The Stickers page placed a shape: which figure, and what to call
     /// the clip, in the interface's language.
     callback library-add-shape(shape: string, label: string);
+    /// CapyCut: a sticker card from the Stickers page - "badge:SUBSCRIBE",
+    /// "emoji:😀". See Studio::place_sticker.
+    callback library-add-sticker(id: string);
     callback library-apply-effect(effect-id: string);
     callback library-apply-transition(transition-id: string);
     /// Filters page: lay the look down as a layer at the playhead.
