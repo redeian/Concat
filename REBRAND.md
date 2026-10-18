@@ -228,6 +228,75 @@ setting trades a few more cuts for fewer of them being short.
 3. Two or three locale strings, then `python3 scripts/locales.py` - CI checks
    that the string inventory is in sync.
 
+### Stickers: shape colour, badges, emoji
+
+**Done and verified:** `Command::SetShapeStyle` (`commands/shape.rs`) changes a
+placed shape's `fill`, `stroke`, `stroke_width` and `size`, each on its own.
+concat-project 157/157. Nothing calls it yet.
+
+**Not started.** These are the touch points, found by reading the tree, so the
+next session does not have to re-derive them.
+
+#### 1. The inspector's colour swatches (the piece Mark asked for)
+
+`ColourField` already exists in `ui/inspector/controls.slint` with `label`,
+`value`, `alpha` and a `changed(value: color)` callback - do not build a picker.
+`VideoPanel` (`ui/inspector/clip-inspector.slint:1017`) is the panel a shape
+already gets, and it already knows it is one: `property <bool> figure:
+root.selected.kind == ClipKind.shape` (line 1056), which hides Background and
+Crop for a figure.
+
+- `SelectedClipData` (`ui/timeline/model.slint`) carries nothing about a shape's
+  paint. Add `shapeFill: color`, `shapeStroke: color`, `shapeHasStroke: bool` -
+  three marked lines - and publish them in `studio.rs` where that struct is
+  built from the selected clip.
+- In `VideoPanel`, add a `Section` gated on `root.figure` holding two
+  `ColourField`s and two callbacks, `shape-fill(color)` and `shape-stroke(color)`.
+- `config-pane.slint:638` forwards the callbacks to `lib.rs`, which calls
+  `studio.clip_action(id, ...)` or a small `set_shape_colour` that applies
+  `Command::SetShapeStyle`. One undo step per pick.
+- `phone/editor.slint:1380` instantiates the same panel; it can ignore the new
+  callbacks and still compile.
+
+#### 2. YouTube badges
+
+A badge is a pill with words in it, and two things are missing: there is no
+rounded rectangle in `ShapeKind` (Square, Circle, Triangle, Parallelogram,
+Trapezoid, Line, Arrow), and nothing places a shape and a title together.
+
+- Add `ShapeKind::Pill` and `Figure::Pill`. The geometry is a rounded rect in
+  `paint_shape` (`concat-text/src/lib.rs:1805`): the box is `(size, size * 0.4)`
+  and the corners take a radius of half the height. Touch points: the model enum
+  and its `id`/`parse` (`concat-project/src/model.rs:1336`), the `Figure` enum
+  and its two matches (`concat-text/src/lib.rs:1819` and `1830`), the aspect
+  table in `studio.rs:5604`, and one entry in the shelf array
+  (`ui/workspace/media-pane.slint:1631`).
+- A badge preset is then a `Command::Batch` of `AddShapeClip` (a Pill, filled)
+  and `AddTextClip` (the words, in `Prompt` or `Kanit`), both placed at the
+  playhead. No new command: the two clips need nothing from each other, so a
+  batch is enough and stays one undo step.
+- Presets to ship: Subscribe, Like, Share, Bell, Comment, Notification. English
+  only, as asked.
+- The shelf entry is one array line plus an `action("sticker:badge-subscribe")`
+  arm in `studio.rs`'s `clip_action`.
+
+#### 3. Emoji
+
+Emoji already render through a COLR face (`concat-text` has a test for it:
+`an_emoji_is_painted_in_the_colours_of_the_face_that_draws_it`), so an emoji
+sticker is a text clip whose content is the emoji at a large `fontSize` - no
+engine work at all.
+
+- One shelf of the common ones (reaction face, fire, heart, check, cross, star,
+  sparkle, warning, question, arrow-emoji) as an array in
+  `ui/workspace/media-pane.slint`, each payload `text:<emoji>`.
+- The `text:` payload already places titles; the arm to extend is whichever
+  builds `AddTextClip` from a dropped card.
+
+**Conflict budget for all three:** the model enum, the `Figure` enum, the shelf
+array and the panel are upstream files. Every one is a marked single line or a
+small marked block, and the presets themselves live in new files.
+
 ### Auto-captions
 
 `concat-speech/src/transcribe.rs` offers six Whisper models: tiny, base, small,
