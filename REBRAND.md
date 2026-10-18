@@ -9,6 +9,40 @@ copyright notices intact. The Concat **name and logo** are not part of the
 licence grant; upstream's `TRADEMARK.md` asks a modified build to ship under its
 own name, which is what "CapyCut" is for. Attribution stays: this is a fork.
 
+## Rules for every feature added here
+
+These are not style preferences. Upstream is a live project with a single
+prolific maintainer; a fork that edits the same lines they do pays for it on
+every rebase. So:
+
+1. **New behaviour goes in a new file.** A feature gets its own module, next to
+   the upstream one it serves (`silence.rs` beside `peaks.rs`, a new preset
+   folder, a new effect package). A new file cannot conflict.
+2. **Touch upstream files in the smallest possible place, and mark it.** When a
+   new module has to be reachable - a `mod` line, one enum variant, one match
+   arm - that is the whole edit, on one line or one small block, prefixed
+   `// CapyCut:` so a conflict resolution is mechanical.
+3. **Never rename what upstream names.** Crate names, module names, command
+   variants, JSON-RPC methods, MCP tool names, the project format. A rename
+   conflicts forever; a new sibling does not.
+4. **Prefer composing existing commands to adding one.** If a feature can be
+   expressed as a `Command::Batch` of commands upstream already has, it is
+   free of merge risk and free of undo-stack risk. Add a command only when the
+   operation cannot be expressed that way - and say so in a comment.
+5. **Never run `cargo fmt` over the workspace.** Upstream's tree is not
+   rustfmt-clean against a newer toolchain (nearly forty files differ), so a
+   workspace-wide format is a diff over the whole repository for no gain. Format
+   the files you wrote, by hand or by review.
+6. **Leave the licence headers alone.** Add your own copyright line under
+   upstream's; never replace theirs. AGPL asks for it and it costs nothing.
+
+`Remove silence` is the worked example of rules 1, 2 and 4: the analysis is a
+new file (`concat-media/src/silence.rs`), and the cut is a new command
+(`Command::RemoveSpan`) because deleting a span with ripple-close has no
+composition from upstream's commands that keeps the edit in one undo step -
+`SplitClips` mints the middle clip's id, and an id nobody knows yet cannot be
+named in a `Batch` prepared in advance.
+
 ## Branches
 
 | Branch | What it is |
@@ -107,21 +141,32 @@ Every Thai preset sets `lineHeight` around 1.4 rather than the default 1.2.
 Thai stacks a tone mark above a vowel above the consonant; at 1.2 the stack
 collides with the line above.
 
-### Known bug: Thai text does not wrap
+### Thai text wraps, by cluster
 
-`concat-text`'s line wrapper (`Setter::wrap`) uses `unicode_linebreak`, which
-implements UAX #14. That algorithm treats Thai as a "complex context" script and
-offers no break opportunities inside a Thai run, because breaking Thai needs a
-dictionary. Thai writes without spaces between words, so a long Thai title with
-a `maxWidth` set has **no break opportunity at all** and overflows the frame
-instead of wrapping.
+`concat-text`'s line wrapper (`Setter::wrap`) used `unicode_linebreak`, which
+implements UAX #14. That algorithm puts Thai in class SA, "complex context": a
+script whose words cannot be found without a dictionary, so it declines to guess
+and offers **no break opportunity inside a Thai run**. Thai writes without
+spaces between words, so a long Thai title held to a `maxWidth` had no break at
+all and ran past the frame instead of wrapping.
 
-The fix is a Thai break pass: insert break opportunities between Thai clusters
-(the base character plus its combining marks, minus breaks after a leading vowel
-and before the repetition mark `ๆ`), and merge them with the UAX #14 result in
-`wrap`. It belongs in `concat-text/src/lib.rs`, in the same commit as a test
-that renders a long Thai string at a narrow `maxWidth` and asserts more than one
-line.
+`concat-text::breaks` now merges UAX #14's opportunities with Thai cluster
+boundaries, and both `wrap` and `words` read from it. A cluster is a character
+plus the marks hung off it, so a line never starts with a tone mark, a vowel
+written above or below, `ๆ`, or the abbreviation mark, and never ends with a
+leading vowel (`เ` at the end of a line reads as a word of its own). A break
+inside a number is refused. Using the same function for `words` keeps per-word
+reveal effects in step with the lines that were actually laid out.
+
+Two tests pin it: `a_thai_line_never_starts_with_a_mark` and
+`a_thai_title_without_spaces_still_wraps`.
+
+What this does **not** do is find Thai word boundaries. A dictionary segmenter
+(ICU's `brkitr`, or `libthai`) would break between words rather than clusters,
+which is what a professional subtitle tool does. Cluster breaking is accepted
+here because it needs no new dependency, never splits a mark from its base, and
+matches what Thai caption styles do on the timeline. If Thai word breaking is
+wanted later, it replaces `breaks` and nothing else.
 
 ### Auto-captions
 
