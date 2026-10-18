@@ -1,0 +1,16 @@
+id = "capycut.thai-formal"
+name = "ไทย ทางการ"
+language = "Thai"
+order = 4
+sample = "ทางการ"
+
+[style]
+content = "เนื้อหาทางวิชาการ"
+fontFamily = "Noto Sans Thai"
+fontWeight = 400
+fontSize = 0.068
+color = "#FFFFFF"
+strokeWidth = 0.0
+shadow = true
+lineHeight = 1.45
+maxWidth = 0.8

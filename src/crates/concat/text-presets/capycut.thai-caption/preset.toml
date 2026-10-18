@@ -1,0 +1,20 @@
+id = "capycut.thai-caption"
+name = "ไทย คำบรรยาย"
+language = "Thai"
+order = 3
+sample = "บรรยาย"
+
+[style]
+content = "คำบรรยายใต้ภาพ"
+fontFamily = "Prompt"
+fontWeight = 700
+fontSize = 0.078
+color = "#FFFFFF"
+strokeWidth = 0.0
+shadow = false
+background = "#000000B3"
+backgroundRadius = 0.018
+backgroundPaddingX = 0.03
+backgroundPaddingY = 0.012
+lineHeight = 1.42
+maxWidth = 0.82

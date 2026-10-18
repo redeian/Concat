@@ -1,0 +1,17 @@
+id = "capycut.thai-impact"
+name = "ไทย ใหญ่"
+language = "Thai"
+order = 1
+sample = "ใหญ่"
+
+[style]
+content = "ใหญ่จริง"
+fontFamily = "Kanit Black"
+fontWeight = 400
+fontSize = 0.155
+color = "#FFFFFF"
+strokeWidth = 0.012
+strokeColor = "#000000"
+shadow = true
+lineHeight = 1.38
+maxWidth = 0.86

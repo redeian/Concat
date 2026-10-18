@@ -266,7 +266,7 @@ const BUNDLED: [&[u8]; 5] = [
 /// (regular) weight: fontdb sets no variation axes. Kosugi Maru carries
 /// Japanese, Secular One and Rubik Scribble Hebrew. The window registers the
 /// same bytes for its preset cards (concat's fonts.rs).
-pub const BASE_FONTS: [&[u8]; 41] = [
+pub const BASE_FONTS: [&[u8]; 45] = [
     include_bytes!("../fonts/Inter-Regular.ttf"),
     include_bytes!("../fonts/Inter-SemiBold.ttf"),
     include_bytes!("../fonts/Inter-Bold.ttf"),
@@ -308,6 +308,13 @@ pub const BASE_FONTS: [&[u8]; 41] = [
     include_bytes!("../fonts/EmilysCandy-Regular.ttf"),
     include_bytes!("../fonts/MysteryQuest-Regular.ttf"),
     include_bytes!("../fonts/ZenTokyoZoo-Regular.ttf"),
+    // Thai display faces, added for CapyCut's Thai presets. Both are OFL and
+    // both cover the whole Thai block bar four rare characters, which Noto
+    // Sans Thai (the script fallback) fills.
+    include_bytes!("../fonts/Kanit-Bold.ttf"),
+    include_bytes!("../fonts/Kanit-Black.ttf"),
+    include_bytes!("../fonts/Prompt-Bold.ttf"),
+    include_bytes!("../fonts/Prompt-SemiBold.ttf"),
 ];
 
 /// Noto Sans CJK SC, cut to GB 2312, Big5 level 1, JIS X 0208, KS X 1001's

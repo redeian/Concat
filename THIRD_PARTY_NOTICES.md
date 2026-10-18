@@ -126,6 +126,8 @@ the OFL allows for Noto, which reserves no font name.
 - **Noto Sans Devanagari** 2.007 (a subset: the Devanagari block): Copyright 2022 The Noto Project Authors (https://github.com/notofonts/devanagari). OFL. See `src/crates/concat-text/fonts/LICENSE-NotoSansDevanagari.txt`.
 - **Noto Sans Bengali** 3.011 (a subset: the Bengali block): Copyright 2022 The Noto Project Authors (https://github.com/notofonts/bengali). OFL. See `src/crates/concat-text/fonts/LICENSE-NotoSansBengali.txt`.
 - **Noto Sans Thai** 2.002 (a subset: the Thai block): Copyright 2022 The Noto Project Authors (https://github.com/notofonts/thai). OFL. See `src/crates/concat-text/fonts/LICENSE-NotoSansThai.txt`.
+- **Kanit** 2.000 (Bold, Black): Copyright 2020 The Kanit Project Authors (https://github.com/cadsondemak/kanit). OFL. See `src/crates/concat-text/fonts/LICENSE-Kanit.txt`. Added by CapyCut for its Thai title presets.
+- **Prompt** 1.001 (Bold, SemiBold): Copyright 2020 The Prompt Project Authors (https://github.com/cadsondemak/prompt). OFL. See `src/crates/concat-text/fonts/LICENSE-Prompt.txt`. Added by CapyCut for its Thai title presets.
 
 The licence does not permit selling the font on its own; shipping the
 `fonts/` directory as it stands satisfies it.

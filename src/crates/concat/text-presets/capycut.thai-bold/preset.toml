@@ -1,0 +1,17 @@
+id = "capycut.thai-bold"
+name = "ไทย เน้น"
+language = "Thai"
+order = 2
+sample = "เน้น"
+
+[style]
+content = "จุดนี้สำคัญ"
+fontFamily = "Kanit"
+fontWeight = 700
+fontSize = 0.125
+color = "#FFD84D"
+strokeWidth = 0.011
+strokeColor = "#000000"
+shadow = true
+lineHeight = 1.38
+maxWidth = 0.86
