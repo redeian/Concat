@@ -1349,6 +1349,10 @@ pub enum ShapeKind {
     Line,
     /// A horizontal rule with a head on its right end.
     Arrow,
+    // CapyCut: a rounded rectangle, so a badge can be a pill rather than a box.
+    /// The same rectangle with its corners rounded: a badge's plate, and the
+    /// one figure a title sits inside rather than beside.
+    Pill,
 }
 
 impl ShapeKind {
@@ -1362,6 +1366,8 @@ impl ShapeKind {
             ShapeKind::Trapezoid => "trapezoid",
             ShapeKind::Line => "line",
             ShapeKind::Arrow => "arrow",
+            // CapyCut
+            ShapeKind::Pill => "pill",
         }
     }
 
@@ -1375,6 +1381,8 @@ impl ShapeKind {
             ShapeKind::Trapezoid,
             ShapeKind::Line,
             ShapeKind::Arrow,
+            // CapyCut
+            ShapeKind::Pill,
         ]
         .into_iter()
         .find(|kind| kind.id() == id)

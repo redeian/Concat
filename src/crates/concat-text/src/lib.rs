@@ -1727,6 +1727,10 @@ pub enum Figure {
     Line,
     /// A horizontal rule with a head on its right end.
     Arrow,
+    // CapyCut: a badge's plate.
+    /// The rectangle with its corners rounded away: a pill. What a badge is
+    /// drawn on, so a title can sit inside a figure rather than beside one.
+    Pill,
 }
 
 /// Everything about a shape's look, in the document's terms: sizes are
@@ -1822,6 +1826,8 @@ fn paint_shape(style: &ShapeStyle, width: u32, height: u32) -> Result<(Pixmap, B
         Figure::Parallelogram | Figure::Trapezoid => (size, size * 0.6),
         Figure::Line => (size, rule),
         Figure::Arrow => (size, (rule * 4.0).max(size * 0.18)),
+        // CapyCut: wide enough for a word, short enough to read as a plate.
+        Figure::Pill => (size, (size * 0.34).max(rule * 2.0)),
     };
     let (left, top) = (cx - w / 2.0, cy - h / 2.0);
     let (right, bottom) = (left + w, top + h);
@@ -1880,6 +1886,22 @@ fn paint_shape(style: &ShapeStyle, width: u32, height: u32) -> Result<(Pixmap, B
             path.line_to(tip, cy);
             path.line_to(tip - arm, cy + arm);
             false
+        }
+        // CapyCut: a rectangle with its corners taken off by half its height,
+        // which is a stadium - the shape a Subscribe or Like plate is.
+        Figure::Pill => {
+            let radius = (h / 2.0).min(w / 2.0);
+            path.move_to(left + radius, top);
+            path.line_to(right - radius, top);
+            path.quad_to(right, top, right, top + radius);
+            path.line_to(right, bottom - radius);
+            path.quad_to(right, bottom, right - radius, bottom);
+            path.line_to(left + radius, bottom);
+            path.quad_to(left, bottom, left, bottom - radius);
+            path.line_to(left, top + radius);
+            path.quad_to(left, top, left + radius, top);
+            path.close();
+            true
         }
     };
     let Some(path) = path.finish() else {

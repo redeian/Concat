@@ -5606,6 +5606,8 @@ impl Studio {
                 model::ShapeKind::Parallelogram | model::ShapeKind::Trapezoid => (side, side * 0.6),
                 model::ShapeKind::Line => (side, shape.stroke_width * height),
                 model::ShapeKind::Arrow => (side, (shape.stroke_width * 4.0).max(0.18) * side),
+                // CapyCut: the pill's box, as the painter draws it.
+                model::ShapeKind::Pill => (side, (side * 0.34).max(1.0)),
             };
             (w * clip.scale / width, h * clip.scale / height)
         } else {

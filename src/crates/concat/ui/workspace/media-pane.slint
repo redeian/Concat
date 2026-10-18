@@ -1638,6 +1638,9 @@ export component ShapeGrid inherits Rectangle {
         { id: "trapezoid", label: I18n.t("mediaPane.shapeTrapezoid"), commands: "M8 5h8l5 14H3z" },
         { id: "line", label: I18n.t("mediaPane.shapeLine"), commands: "M3 12h18" },
         { id: "arrow", label: I18n.t("mediaPane.shapeArrow"), commands: "M3 12h18 M15 6l6 6-6 6" },
+        // CapyCut: a badge's plate.
+        { id: "pill", label: I18n.t("mediaPane.shapePill"),
+            commands: "M9 7h6a5 5 0 0 1 0 10H9A5 5 0 0 1 9 7z" },
     ];
 
     property <length> gap: 8px;

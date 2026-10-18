@@ -702,6 +702,7 @@
   "shapePanel.paintNote": "รูปทรงวาดจากสี ไม่ได้มาจากภาพ: สีพื้นคือตัวรูป และเส้นขอบคือเส้นรอบนอกของมัน",
   "shapePanel.fill": "สีพื้น",
   "shapePanel.outline": "เส้นขอบ",
+  "mediaPane.shapePill": "แคปซูล",
   "studio.exportingAudio": "กำลังส่งออกเสียง…",
   "studio.fileHasNoPicture": "ไฟล์นี้ไม่มีภาพให้เพิ่มคุณภาพ",
   "studio.fillFrame": "เติมเต็มเฟรม",

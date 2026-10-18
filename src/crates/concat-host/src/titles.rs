@@ -597,6 +597,8 @@ fn shape_style(style: &ShapeStyle) -> concat_text::ShapeStyle {
             ShapeKind::Trapezoid => Figure::Trapezoid,
             ShapeKind::Line => Figure::Line,
             ShapeKind::Arrow => Figure::Arrow,
+            // CapyCut
+            ShapeKind::Pill => Figure::Pill,
         },
         size: style.size,
         fill: style.fill.clone(),
