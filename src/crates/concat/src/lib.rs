@@ -1460,6 +1460,13 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
     editor.on_shape_stroke(on_window!(|state, colour: slint::Color| {
         state.set_shape_colour(None, Some(colour));
     }));
+    // CapyCut: *Remove silence*'s knobs and its cut, from the Audio panel.
+    editor.on_silence_param(on_window!(|state, index: i32, value: f32| {
+        state.set_silence_param(index, f64::from(value));
+    }));
+    editor.on_silence_cut(on_window!(|state| {
+        state.silence_cut();
+    }));
     editor.on_cutout_tool(on_window!(|state, index: i32| {
         state.cutout_tool(index);
     }));

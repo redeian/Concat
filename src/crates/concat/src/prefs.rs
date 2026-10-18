@@ -20,10 +20,40 @@ const FILE: &str = "settings.json";
 /// https://github.com/jub0t/Concat/issues/320
 pub const UI_SCALES: [u32; 6] = [100, 110, 125, 150, 175, 200];
 
+/// CapyCut: what *Remove silence* cuts with, as last set in the Audio tab.
+/// Seconds, and dBFS for the level. The defaults are the ones
+/// `concat_media::silence::Settings` ships, which are the field's.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct SilencePrefs {
+    /// A window quieter than this is silent.
+    pub threshold_db: f64,
+    /// The shortest cut worth making, after padding.
+    pub min_cut: f64,
+    /// Taken off each end, so a word is never clipped.
+    pub padding: f64,
+    /// The shortest stretch of sound kept between two cuts.
+    pub gap: f64,
+}
+
+impl Default for SilencePrefs {
+    fn default() -> Self {
+        SilencePrefs {
+            threshold_db: -30.0,
+            min_cut: 0.5,
+            padding: 0.2,
+            gap: 0.3,
+        }
+    }
+}
+
 /// Remembered preferences.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Preferences {
+    // CapyCut: what *Remove silence* cuts with, as last set in the Audio tab.
+    // Its own struct so the four values travel together in the prefs file.
+    pub silence: SilencePrefs,
     /// The dark theme. `None` is the app's default, which is dark.
     pub dark: Option<bool>,
     /// The parent folder of the last project created successfully.

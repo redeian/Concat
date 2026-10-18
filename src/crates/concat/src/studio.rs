@@ -10227,6 +10227,12 @@ impl Studio {
                 .shape
                 .as_ref()
                 .is_some_and(|shape| shape.stroke_width > 0.0 && !shape.stroke.is_empty()),
+            // CapyCut: the knobs *Remove silence* cuts with, remembered across
+            // sessions and shared by every clip.
+            silence_threshold: self.prefs.silence.threshold_db as f32,
+            silence_min_cut: self.prefs.silence.min_cut as f32,
+            silence_padding: self.prefs.silence.padding as f32,
+            silence_gap: self.prefs.silence.gap as f32,
             transition_id: clip
                 .transition_in
                 .as_ref()
@@ -11895,6 +11901,47 @@ impl Studio {
         });
     }
 
+    /// Sets one of the four knobs *Remove silence* cuts with, and remembers it.
+    ///
+    /// `index` is the order the Audio panel shows them in: the level, the
+    /// shortest cut, the padding, the gap left between cuts. Each is held to a
+    /// range that does more good than harm - a threshold above -18 starts
+    /// cutting speech, one below -60 cuts only digital silence - and a padding
+    /// longer than the shortest cut could never leave a cut at all.
+    pub fn set_silence_param(&mut self, index: i32, value: f64) {
+        if !value.is_finite() {
+            return;
+        }
+        let silence = &mut self.prefs.silence;
+        match index {
+            0 => silence.threshold_db = value.clamp(-60.0, -18.0),
+            1 => silence.min_cut = value.clamp(0.1, 3.0),
+            2 => silence.padding = value.clamp(0.0, 1.0),
+            3 => silence.gap = value.clamp(0.0, 2.0),
+            _ => return,
+        }
+        self.prefs.save(&self.host.dirs);
+    }
+
+    /// The knobs as the analysis wants them.
+    fn silence_settings(&self) -> concat_media::silence::Settings {
+        let prefs = self.prefs.silence;
+        concat_media::silence::Settings {
+            threshold_db: prefs.threshold_db,
+            min_silence: prefs.min_cut,
+            padding: prefs.padding,
+            min_gap: prefs.gap,
+        }
+    }
+
+    /// *Remove silence* on the selected clip, from the Audio panel's button.
+    pub fn silence_cut(&mut self) {
+        let Some(id) = self.sole_selection() else {
+            return;
+        };
+        self.remove_silence(&id);
+    }
+
     /// Cuts the dead air out of `id`'s sound, as one undo step.
     ///
     /// The analysis is `concat_media::silence` over the part of the file the
@@ -11904,7 +11951,7 @@ impl Studio {
     /// footage before any of this existed.
     fn remove_silence(&mut self, id: &str) {
         self.flush_commit();
-        let settings = concat_media::silence::Settings::default();
+        let settings = self.silence_settings();
         let commands = match crate::silence_cut::plan(self.project(), id, settings) {
             Ok(commands) => commands,
             Err(why) => {

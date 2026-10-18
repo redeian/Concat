@@ -362,6 +362,13 @@ export struct SelectedClipData {
     shape-stroke: color,
     shape-has-stroke: bool,
 
+    // CapyCut: what *Remove silence* cuts with, so the knobs the command line
+    // has are in the window too. Seconds, and dBFS for the level.
+    silence-threshold: float,
+    silence-min-cut: float,
+    silence-padding: float,
+    silence-gap: float,
+
     // the transition on the cut into this clip; empty id means none
     transition-id: string,
     transition-name: string,

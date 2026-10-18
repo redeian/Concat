@@ -287,6 +287,9 @@ export global Editor {
     /// CapyCut: a shape's paint, from the inspector's swatches.
     callback shape-fill(value: color);
     callback shape-stroke(value: color);
+    /// CapyCut: *Remove silence*'s knobs and its cut, from the Audio panel.
+    callback silence-param(index: int, value: float);
+    callback silence-cut();
     callback cutout-tool(index: int);
     callback cutout-size(size: float);
     callback cutout-painting(on: bool);
