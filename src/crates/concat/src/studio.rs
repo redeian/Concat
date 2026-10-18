@@ -11938,7 +11938,17 @@ impl Studio {
                 });
             }
             "badge" => {
+                // The plate is sized to its word rather than fixed: a plate
+                // wider than the words reads as an empty box, and a narrower
+                // one clips them. Estimated from the character count — the
+                // engine can measure a title exactly, but not before it is on
+                // the timeline — at the advance a bold face runs at this size,
+                // plus the air a plate wants either side. Floored and ceilinged
+                // so one long word cannot swallow the frame.
+                let letters = f64::from(u32::try_from(name.chars().count()).unwrap_or(u32::MAX));
+                let plate_size = (0.0527 * letters + 0.12).clamp(0.24, 0.95);
                 let plate = model::ShapeStyle {
+                    size: plate_size,
                     fill: BADGE_FILL.to_owned(),
                     ..model::ShapeStyle::of(model::ShapeKind::Pill)
                 };

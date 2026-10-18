@@ -715,6 +715,8 @@
   "stickerPanel.bell": "เตือน",
   "stickerPanel.comment": "คอมเมนต์",
   "stickerPanel.follow": "ติดตาม",
+  "mediaPane.badges": "ป้าย",
+  "mediaPane.emoji": "อีโมจิ",
   "studio.exportingAudio": "กำลังส่งออกเสียง…",
   "studio.fileHasNoPicture": "ไฟล์นี้ไม่มีภาพให้เพิ่มคุณภาพ",
   "studio.fillFrame": "เติมเต็มเฟรม",

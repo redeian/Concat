@@ -1820,6 +1820,10 @@ export component MediaPane inherits Rectangle {
     /// 0 = Titles, 1 = Styles, 2 = Languages
     property <int> text-category;
     property <bool> stickers-open: true;
+    /// CapyCut: which category the Stickers page shows - 0 the figures, 1 the
+    /// badges, 2 the emoji. Each is its own list rather than one shelf mixing
+    /// a circle with a Subscribe plate.
+    property <int> sticker-category: 0;
     property <bool> transitions-open: true;
     property <bool> effects-open: true;
     property <bool> filters-open: true;
@@ -2254,7 +2258,22 @@ export component MediaPane inherits Rectangle {
                         if root.stickers-open: CategoryRow {
                             height: 24px;
                             label: I18n.t("mediaPane.shapes");
-                            current: true;
+                            current: root.sticker-category == 0;
+                            clicked => { root.sticker-category = 0; }
+                        }
+                        // CapyCut: the badges and the emoji, as categories of
+                        // their own beside the figures.
+                        if root.stickers-open: CategoryRow {
+                            height: 24px;
+                            label: I18n.t("mediaPane.badges");
+                            current: root.sticker-category == 1;
+                            clicked => { root.sticker-category = 1; }
+                        }
+                        if root.stickers-open: CategoryRow {
+                            height: 24px;
+                            label: I18n.t("mediaPane.emoji");
+                            current: root.sticker-category == 2;
+                            clicked => { root.sticker-category = 2; }
                         }
                     }
 
@@ -2654,13 +2673,15 @@ export component MediaPane inherits Rectangle {
                 if root.tab == 2: VerticalLayout {
                     padding: 8px;
 
-                    ShapeGrid {
+                    // CapyCut: one category at a time - the figures, the
+                    // badges, or the emoji, as the list on the left chooses.
+                    if root.sticker-category == 0: ShapeGrid {
                         horizontal-stretch: 1;
                         placed(shape, label) => { root.add-shape(shape, label); }
                     }
 
-                    // CapyCut: the badges and emoji, under the figures.
-                    StickerGrid {
+                    if root.sticker-category != 0: StickerGrid {
+                        category: root.sticker-category == 2 ? "emoji" : "badge";
                         placed(id) => { root.add-sticker(id); }
                     }
                 }

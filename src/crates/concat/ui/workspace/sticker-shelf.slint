@@ -2,23 +2,22 @@
 // SPDX-FileCopyrightText: 2026 Jareer and Concat contributors
 // SPDX-FileCopyrightText: 2026 CapyCut contributors
 
-// CapyCut: badges and emoji, the other half of the Stickers page. The figures
-// above them are shapes; these are the things a video wears - SUBSCRIBE, LIKE,
-// a bell - and the reaction an editor drops on a beat.
+// CapyCut: the badges and the emoji, as categories of their own on the
+// Stickers page rather than two more figures. A Subscribe plate is not a
+// shape, and a grinning face is not a sticker in the sense a circle is.
 //
-// An emoji card places a title whose words are the emoji: the interface already
-// draws emoji from a COLR face, so there is no asset here and nothing to
-// download. A badge card places two clips - the pill from the Shapes shelf and
-// its word on top - which is one batch and one undo step. See
-// Studio::place_sticker.
+// An emoji card places a title whose words are the emoji: the interface draws
+// emoji from a COLR face, so there is no asset here and nothing to download. A
+// badge card places two clips - the pill from the Shapes shelf and its word on
+// top - which is one batch and one undo step. See Studio::place_sticker.
 
 import { I18n } from "../i18n.slint";
 import { Theme } from "../theme/theme.slint";
 
 export struct StickerCardData {
-    /// What the click sends: "badge:subscribe", "emoji:😀".
+    /// What the click sends: "badge:SUBSCRIBE", "emoji:😀".
     id: string,
-    /// The accessible label under nothing - kept for the tooltip.
+    /// The card's name in the interface's language.
     label: string,
     /// What the card draws: the badge's word, or the emoji itself.
     sample: string,
@@ -27,43 +26,50 @@ export struct StickerCardData {
 export component StickerGrid inherits VerticalLayout {
     callback placed(id: string);
 
-    in property <[StickerCardData]> stickers: [
+    /// Which category is on show: "badge" or "emoji".
+    in property <string> category: "badge";
+
+    property <[StickerCardData]> badges: [
         { id: "badge:SUBSCRIBE", label: I18n.t("stickerPanel.subscribe"), sample: "SUBSCRIBE" },
         { id: "badge:LIKE", label: I18n.t("stickerPanel.like"), sample: "👍 LIKE" },
         { id: "badge:SHARE", label: I18n.t("stickerPanel.share"), sample: "SHARE" },
         { id: "badge:BELL", label: I18n.t("stickerPanel.bell"), sample: "🔔 ALL" },
         { id: "badge:COMMENT", label: I18n.t("stickerPanel.comment"), sample: "COMMENT" },
         { id: "badge:FOLLOW", label: I18n.t("stickerPanel.follow"), sample: "FOLLOW" },
+    ];
+
+    property <[StickerCardData]> emojis: [
         { id: "emoji:😀", label: "grin", sample: "😀" },
         { id: "emoji:😂", label: "laugh", sample: "😂" },
         { id: "emoji:😮", label: "wow", sample: "😮" },
         { id: "emoji:😍", label: "love", sample: "😍" },
+        { id: "emoji:😎", label: "cool", sample: "😎" },
+        { id: "emoji:🤔", label: "think", sample: "🤔" },
         { id: "emoji:🔥", label: "fire", sample: "🔥" },
         { id: "emoji:❤️", label: "heart", sample: "❤️" },
+        { id: "emoji:💯", label: "hundred", sample: "💯" },
         { id: "emoji:✅", label: "check", sample: "✅" },
         { id: "emoji:❌", label: "cross", sample: "❌" },
         { id: "emoji:⭐", label: "star", sample: "⭐" },
         { id: "emoji:✨", label: "sparkle", sample: "✨" },
         { id: "emoji:⚠️", label: "warn", sample: "⚠️" },
         { id: "emoji:❓", label: "question", sample: "❓" },
+        { id: "emoji:❗", label: "exclaim", sample: "❗" },
         { id: "emoji:👆", label: "point up", sample: "👆" },
         { id: "emoji:👉", label: "point right", sample: "👉" },
+        { id: "emoji:👇", label: "point down", sample: "👇" },
+        { id: "emoji:🎉", label: "party", sample: "🎉" },
     ];
 
-    spacing: 6px;
-    padding-top: 10px;
+    /// The cards the chosen category shows.
+    property <[StickerCardData]> shown: root.category == "emoji" ? root.emojis : root.badges;
 
-    Text {
-        text: I18n.t("stickerPanel.title");
-        color: Theme.fg-muted;
-        font-size: Theme.fs-sm;
-        height: 18px;
-    }
+    spacing: 6px;
 
     GridLayout {
         spacing: 6px;
 
-        for card[index] in root.stickers: Rectangle {
+        for card[index] in root.shown: Rectangle {
             row: Math.floor(index / 4);
             col: Math.mod(index, 4);
             height: 40px;

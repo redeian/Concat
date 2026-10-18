@@ -715,6 +715,8 @@
   "stickerPanel.bell": "Bell",
   "stickerPanel.comment": "Comment",
   "stickerPanel.follow": "Follow",
+  "mediaPane.badges": "Badges",
+  "mediaPane.emoji": "Emoji",
   "studio.exportingAudio": "Exporting the audio…",
   "studio.fileHasNoPicture": "This file has no picture to enhance",
   "studio.fillFrame": "Fill frame",
