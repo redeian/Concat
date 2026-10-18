@@ -25,6 +25,8 @@ pub use clips::{PlayheadSide, consolidation_clips, delete_to_playhead, why_not_m
 mod media;
 // CapyCut: the span cut behind *Remove silence*, in a file of its own.
 mod span;
+// CapyCut: recolouring a placed shape, in a file of its own.
+mod shape;
 mod properties;
 mod timelines;
 mod tracks;
@@ -668,6 +670,26 @@ pub enum Command {
         #[serde(default)]
         ripple: bool,
     },
+    // CapyCut: recolouring a placed shape. See commands/shape.rs.
+    /// Changes a placed shape's look, each field on its own: only what is
+    /// sent changes. A clip that is not a shape, or an unknown clip, is a
+    /// tolerated no-op.
+    SetShapeStyle {
+        /// The shape clip.
+        clip_id: String,
+        /// New fill, `#rrggbb` or `#rrggbbaa`; empty for an outline alone.
+        #[serde(default)]
+        fill: Option<String>,
+        /// New outline colour, in the same form.
+        #[serde(default)]
+        stroke: Option<String>,
+        /// New outline width as a fraction of frame height, floored at 0.
+        #[serde(default)]
+        stroke_width: Option<f64>,
+        /// New size as a fraction of frame height, floored at 0.
+        #[serde(default)]
+        size: Option<f64>,
+    },
     /// Applies a [`ClipPatch`]: only the fields present change, with the
     /// clamps documented on the patch. An unknown clip is a no-op.
     UpdateClip {
@@ -1227,6 +1249,8 @@ pub fn apply(
         | Command::RemoveClips { .. }) => clips::apply(project, mint, command),
         // CapyCut: *Remove silence*'s cut. See commands/span.rs.
         command @ Command::RemoveSpan { .. } => span::apply(project, mint, command),
+        // CapyCut: the inspector's colour swatches for a shape.
+        command @ Command::SetShapeStyle { .. } => shape::apply(project, mint, command),
         command @ (Command::UpdateClip { .. }
         | Command::SetClipSpeed { .. }
         | Command::SetClipCutout { .. }
