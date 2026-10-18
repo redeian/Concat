@@ -168,6 +168,66 @@ here because it needs no new dependency, never splits a mark from its base, and
 matches what Thai caption styles do on the timeline. If Thai word breaking is
 wanted later, it replaces `breaks` and nothing else.
 
+### Remove silence
+
+**Where it is: engine + CLI. Not in a menu yet.**
+
+The analysis is `concat-media/src/silence.rs`, a new file: ten-millisecond
+windows, each to its RMS level in dBFS, runs of windows under the threshold
+reported as silence to cut. A stereo frame counts silent only when every
+channel is, as FFmpeg's `silencedetect` has it. `suggest_threshold_db` measures
+the material - the histogram of window levels usually has two peaks, the speaker
+and the room - instead of asking the editor to guess.
+
+Defaults, picked from what the field ships rather than from taste:
+
+| Tool | Threshold | Minimum | Padding |
+|---|---|---|---|
+| FFmpeg `silencedetect` defaults | -60 dB | 2 s | none |
+| FFmpeg as usually driven | -30 dB | 0.5 s | none |
+| FireCut (Premiere) recommends | -30 dBFS (-35 advised) | 750 ms | 250 ms each side |
+| VideoCascade API | -30 dB | 0.5 s | none |
+| auto-editor default | ~-28 dB | - | 0.2 s |
+| **CapyCut** | **-30 dBFS** | **0.5 s of cut** | **0.2 s, 0.3 s left between cuts** |
+
+`min_silence` measures the **cut**, after padding - not the run detected before
+it. Measured the other way round, on real footage, the setting promised half a
+second and delivered cuts of a tenth: 119 of 200 were under the number beside
+the slider.
+
+Run it on a file:
+
+```sh
+cargo run -p concat-cli -- silence ~/Movies/recording.mp4
+cargo run -p concat-cli -- silence ~/Movies/recording.mp4 --threshold -35 --min-silence 0.8
+```
+
+With no `--threshold` it measures the file and says so. Decoding is 8 kHz mono
+whatever the file is - 115 MB for an hour instead of 1.4 GB.
+
+Measured on a 24-minute screen recording (1445.8 s): measured threshold
+-45 dBFS, 80 cuts, 253 s removed, 17% of the file. At -35 dBFS with an 0.8 s
+minimum, 68 cuts and 258 s. Both are sane for talking-head footage; the tighter
+setting trades a few more cuts for fewer of them being short.
+
+**What is still missing before it can be clicked**, in order:
+
+1. `Command::RemoveSpan { track_id, start, end, ripple }` in `concat-project` -
+   the cut itself. It cannot be composed from upstream's commands: `SplitClips`
+   mints the middle clip's id, and an id nobody knows yet cannot be named in a
+   `Batch` prepared in advance, so the edit would not be one undo step. Logic in
+   a new `commands/span.rs`; the upstream edits are one enum variant and one
+   match arm, both marked `// CapyCut:`. Edge cases that must be right: a clip
+   inside the span, a span over a clip's head, over its tail, across the middle
+   of one, across a whole clip, and keyframes (`rewindow_keys`) plus
+   `source_start` against `speed`.
+2. The action in `studio.rs`, which is where the menus are built in Rust: the
+   timeline's context menu (`MenuRow::Action`, around the row of effects verbs)
+   and the Edit bar. CapCut and Resolve put auto-cut-silence on the clip's
+   right-click; Premiere and FireCut keep it on a menu.
+3. Two or three locale strings, then `python3 scripts/locales.py` - CI checks
+   that the string inventory is in sync.
+
 ### Auto-captions
 
 `concat-speech/src/transcribe.rs` offers six Whisper models: tiny, base, small,
