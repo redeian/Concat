@@ -32,6 +32,7 @@ mod ui {
 }
 
 mod batch_volume;
+mod brand;
 mod chips;
 mod dock;
 mod fonts;

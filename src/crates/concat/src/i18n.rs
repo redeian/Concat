@@ -240,10 +240,16 @@ pub fn current() -> String {
 
 /// `key` in the interface's language: its translation, else its English,
 /// else - a key nothing lists - the key itself.
+///
+/// The words pass through [`crate::brand::in_text`], so a shipped locale
+/// reads this build's name without any file saying it. The key itself does
+/// not: a missing translation shows the key, and a key is an address.
 pub fn t(key: &str) -> String {
-    translated(key)
-        .or_else(|| english().by_key.get(key).cloned())
-        .unwrap_or_else(|| key.to_owned())
+    let words = translated(key).or_else(|| english().by_key.get(key).cloned());
+    match words {
+        Some(words) => crate::brand::in_text(words),
+        None => key.to_owned(),
+    }
 }
 
 /// The active language's line for `key`, if it has one.

@@ -22,7 +22,12 @@
 use std::path::{Path, PathBuf};
 
 /// The app identifier, which is also the folder name everywhere.
-pub const IDENTIFIER: &str = "app.concat.editor";
+///
+/// Changed for CapyCut: this is a different application with its own settings,
+/// recents and downloaded models. A machine that ran Concat sees an empty
+/// CapyCut, which is the point - the two do not share a model cache or a
+/// settings file, and neither corrupts the other's.
+pub const IDENTIFIER: &str = "app.capycut.editor";
 
 /// The app's own directories on this machine.
 #[derive(Clone, Debug)]

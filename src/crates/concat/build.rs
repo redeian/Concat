@@ -75,12 +75,13 @@ fn main() {
         let icon = "../../../assets/icons/concat.ico";
         println!("cargo:rerun-if-changed={icon}");
         // The file's name and description as Windows shows them in its
-        // properties, and as code signing checks them: "Concat" in every
+        // properties, and as code signing checks them: "CapyCut" in every
         // build, where the default would be the crate's lower-case name.
+        // The copyright keeps the upstream holders: the AGPL asks for it.
         winresource::WindowsResource::new()
             .set_icon(icon)
-            .set("ProductName", "Concat")
-            .set("FileDescription", "Concat")
+            .set("ProductName", "CapyCut")
+            .set("FileDescription", "CapyCut")
             .set(
                 "LegalCopyright",
                 "Copyright 2026 Jareer and Concat contributors, AGPL-3.0-or-later",

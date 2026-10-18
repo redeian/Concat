@@ -91,9 +91,11 @@ pub fn shown<'a>(
 }
 
 /// The official site, which the guides and the developer docs are pages of.
+/// Kept as upstream's: this fork has no site of its own yet, and the guides
+/// it links to describe the app this one is.
 const SITE: &str = "https://concat.standalones.org";
 /// The repository: the code, the issues, the releases.
-pub const REPOSITORY: &str = "https://github.com/jub0t/Concat";
+pub const REPOSITORY: &str = crate::brand::REPOSITORY;
 
 /// Where each of the launch screen's links goes, by the name the screen
 /// sends. One table, so a moved page is one line here. Every address is a
@@ -195,12 +197,13 @@ fn default_location() -> String {
 /// `~/Desktop` there is a folder the app is not allowed to make, and every
 /// new project failed with EPERM. https://github.com/jub0t/Concat/issues/299
 fn location_on(os: &str, desktop: Option<PathBuf>, home: impl Fn(&str) -> String) -> String {
+    let name = crate::brand::APP_NAME;
     match os {
-        "android" => home("Concat"),
-        "ios" => home("Documents/Concat"),
+        "android" => home(name),
+        "ios" => home(&format!("Documents/{name}")),
         _ => desktop
-            .map(|desktop| desktop.join("Concat").to_string_lossy().into_owned())
-            .unwrap_or_else(|| home("Desktop/Concat")),
+            .map(|desktop| desktop.join(name).to_string_lossy().into_owned())
+            .unwrap_or_else(|| home(&format!("Desktop/{name}"))),
     }
 }
 
@@ -545,15 +548,15 @@ mod tests {
         let desktop = || Some(PathBuf::from("/desk"));
         assert_eq!(
             location_on("ios", desktop(), home),
-            "/home/Documents/Concat"
+            "/home/Documents/CapyCut"
         );
-        assert_eq!(location_on("ios", None, home), "/home/Documents/Concat");
-        assert_eq!(location_on("android", None, home), "/home/Concat");
+        assert_eq!(location_on("ios", None, home), "/home/Documents/CapyCut");
+        assert_eq!(location_on("android", None, home), "/home/CapyCut");
         assert_eq!(
             PathBuf::from(location_on("macos", desktop(), home)),
-            Path::new("/desk").join("Concat")
+            Path::new("/desk").join("CapyCut")
         );
-        assert_eq!(location_on("linux", None, home), "/home/Desktop/Concat");
+        assert_eq!(location_on("linux", None, home), "/home/Desktop/CapyCut");
     }
 
     /// The next untitled name skips every folder already there, and starts
