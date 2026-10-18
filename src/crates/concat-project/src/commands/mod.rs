@@ -23,6 +23,8 @@ mod audio;
 mod clips;
 pub use clips::{PlayheadSide, consolidation_clips, delete_to_playhead, why_not_merge};
 mod media;
+// CapyCut: the span cut behind *Remove silence*, in a file of its own.
+mod span;
 mod properties;
 mod timelines;
 mod tracks;
@@ -647,6 +649,25 @@ pub enum Command {
         #[serde(default)]
         ripple: bool,
     },
+    // CapyCut: the primitive behind *Remove silence*. See commands/span.rs for
+    // why this is a command and not a batch of the ones above.
+    /// Cuts [start, end) seconds out of one lane: every clip the span touches
+    /// gives up the part of itself inside it, a clip the span crosses keeps a
+    /// tail starting where the span began, and a clip wholly inside it goes.
+    /// With `ripple` the lane closes behind the cut, as a magnetic track does.
+    RemoveSpan {
+        /// The lane to cut.
+        track_id: String,
+        /// Where the span begins, in timeline seconds.
+        start: f64,
+        /// Where it ends, in timeline seconds.
+        end: f64,
+        /// When true, everything after the span on this lane moves left by its
+        /// length. Other lanes are untouched, so a picture cut does not pull
+        /// the sound on another track.
+        #[serde(default)]
+        ripple: bool,
+    },
     /// Applies a [`ClipPatch`]: only the fields present change, with the
     /// clamps documented on the patch. An unknown clip is a no-op.
     UpdateClip {
@@ -1204,6 +1225,8 @@ pub fn apply(
         | Command::MergeClips { .. }
         | Command::ConsolidateClips { .. }
         | Command::RemoveClips { .. }) => clips::apply(project, mint, command),
+        // CapyCut: *Remove silence*'s cut. See commands/span.rs.
+        command @ Command::RemoveSpan { .. } => span::apply(project, mint, command),
         command @ (Command::UpdateClip { .. }
         | Command::SetClipSpeed { .. }
         | Command::SetClipCutout { .. }

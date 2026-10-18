@@ -11142,6 +11142,16 @@ impl Studio {
                 "",
                 self.clip_has_sound(clip),
             ));
+            // CapyCut: the dead air in this clip's sound, taken out in one
+            // step. Silence and the room it leaves behind are the first thing
+            // anyone cuts by hand; see silence_cut.rs.
+            rows.push(action(
+                "remove-silence",
+                t("studio.removeSilence"),
+                Glyph::Waveform,
+                "",
+                self.clip_has_sound(clip) && !locked,
+            ));
             // What is said in it, as titles on the timeline: the captions
             // sheet, opened on this clip. Here so the transcriber is found
             // where the sound is, not only on the tray (#302). The captions
@@ -11837,6 +11847,33 @@ impl Studio {
         self.selection = sounds;
     }
 
+    /// Cuts the dead air out of `id`'s sound, as one undo step.
+    ///
+    /// The analysis is `concat_media::silence` over the part of the file the
+    /// clip plays, and `silence_cut` maps it back onto the timeline. The
+    /// settings are the defaults the field ships; `concat-cli silence` prints
+    /// the same numbers on a file, which is how they were checked against real
+    /// footage before any of this existed.
+    fn remove_silence(&mut self, id: &str) {
+        self.flush_commit();
+        let settings = concat_media::silence::Settings::default();
+        let commands = match crate::silence_cut::plan(self.project(), id, settings) {
+            Ok(commands) => commands,
+            Err(why) => {
+                self.notify(&why, true);
+                return;
+            }
+        };
+        if commands.is_empty() {
+            self.notify(&t("studio.noSilence"), false);
+            return;
+        }
+        for command in commands {
+            self.apply(command);
+        }
+        self.notify(&t("studio.silenceRemoved"), false);
+    }
+
     pub fn clip_action(&mut self, id: &str, action: &str) {
         log::info!("clip menu: {action} on {id}");
         let Some(clip) = self.clip(id).cloned() else {
@@ -11888,6 +11925,9 @@ impl Studio {
                 self.inspector_jump = (self.inspector_jump.0 + 1, "Video", "Enhance");
             }
             "export-audio" => self.export_clip_audio(id),
+            // CapyCut: the silences in this clip's sound, cut out as one undo
+            // step. The analysis is silence_cut's.
+            "remove-silence" => self.remove_silence(id),
             "detach" => self.detach_audio(&clip),
             "reattach" => {
                 self.apply(Command::ReattachAudio {

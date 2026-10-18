@@ -62,6 +62,8 @@ pub use platform::{MicrophoneAccess, install_microphone_access};
 mod panes;
 mod prefs;
 mod presets;
+// CapyCut: *Remove silence*'s joining piece, in a file of its own.
+mod silence_cut;
 mod source;
 mod studio;
 mod sysinfo;
