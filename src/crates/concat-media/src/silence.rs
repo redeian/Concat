@@ -55,7 +55,14 @@ pub struct Settings {
     /// A window quieter than this is silent. dBFS: 0 is full scale, so this is
     /// always negative.
     pub threshold_db: f64,
-    /// A run of silence shorter than this is a pause, not a cut. Seconds.
+    /// The shortest **cut** worth making. Seconds.
+    ///
+    /// Measured on what is actually removed - after [`Settings::padding`] has
+    /// been taken off both ends - not on the run that was detected. A silence
+    /// of 0.7 s with 0.2 s of padding leaves a 0.3 s cut, and a 0.3 s cut on a
+    /// timeline is a stutter rather than an edit, so it is not made. Measuring
+    /// the run instead is what the tools that ship padding get wrong: it
+    /// promises half a second and delivers a tenth.
     pub min_silence: f64,
     /// Taken off each end of a silence found, so the cut never lands on the
     /// attack of a word or the tail of one. Seconds.
@@ -168,14 +175,15 @@ pub fn detect(
         runs.push(start..levels.len());
     }
 
-    // Long enough to be a cut, then padded at both ends.
+    // Padded at both ends, then held to the minimum on what survives: the
+    // setting is about the cut, so a silence that padding eats below the
+    // minimum is not made at all.
     let mut found: Vec<Range<f64>> = runs
         .into_iter()
-        .filter(|run| seconds_of(run.len()) >= settings.min_silence)
         .filter_map(|run| {
             let start = seconds_of(run.start) + settings.padding;
             let end = seconds_of(run.end) - settings.padding;
-            (end > start).then_some(start..end)
+            (end - start >= settings.min_silence).then_some(start..end)
         })
         .collect();
 
@@ -329,6 +337,30 @@ mod tests {
         );
         assert!((found[0].start - 0.0).abs() < 0.02, "{found:?}");
         assert!((found[0].end - 2.1).abs() < 0.02, "{found:?}");
+    }
+
+    #[test]
+    fn the_minimum_is_about_the_cut_not_the_run_that_was_detected() {
+        // Seven tenths of a second of silence, padded by two: the cut would be
+        // a third of a second, which is a stutter rather than an edit, so it
+        // is not made - even though the run itself beats the minimum.
+        let seven = vec![0.0_f32; (RATE as f64 * 0.7) as usize];
+        let samples = joined(&[tone(0.5), seven, tone(0.5)]);
+        let found = detect(&samples, RATE, 1, &settings_with_padding(0.2));
+        assert!(found.is_empty(), "{} was cut", found.len());
+        // A whole second of silence with the same padding survives, at six
+        // tenths of a second.
+        let samples = joined(&[tone(0.5), quiet(), tone(0.5)]);
+        let found = detect(&samples, RATE, 1, &settings_with_padding(0.2));
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert!((found[0].end - found[0].start - 0.6).abs() < 0.02, "{found:?}");
+    }
+
+    fn settings_with_padding(padding: f64) -> Settings {
+        Settings {
+            padding,
+            ..settings()
+        }
     }
 
     #[test]
