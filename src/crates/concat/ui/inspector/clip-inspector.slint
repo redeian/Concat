@@ -1449,14 +1449,14 @@ export component VideoPanel inherits VerticalLayout {
             ColourField {
                 label: I18n.t("shapePanel.fill");
                 value: root.selected.shape-fill;
-                alpha: false;
+                alpha: true;
                 changed(colour) => { root.shape-fill(colour); }
             }
 
             ColourField {
                 label: I18n.t("shapePanel.outline");
                 value: root.selected.shape-stroke;
-                alpha: false;
+                alpha: true;
                 changed(colour) => { root.shape-stroke(colour); }
             }
         }

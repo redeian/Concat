@@ -90,11 +90,8 @@ pub fn shown<'a>(
     shown
 }
 
-/// The official site, which the guides and the developer docs are pages of.
-/// Kept as upstream's: this fork has no site of its own yet, and the guides
-/// it links to describe the app this one is.
-const SITE: &str = "https://concat.standalones.org";
-/// The repository: the code, the issues, the releases.
+/// The repository: the code, the issues, the releases. Upstream's own site is
+/// deliberately not here any more: it is Concat's, and this is a fork of it.
 pub const REPOSITORY: &str = crate::brand::REPOSITORY;
 
 /// Where each of the launch screen's links goes, by the name the screen
@@ -104,12 +101,14 @@ pub const REPOSITORY: &str = crate::brand::REPOSITORY;
 /// "shortcuts" is not here: it opens Settings, not a page.
 pub fn link(name: &str) -> Option<String> {
     Some(match name {
-        "guides" => format!("{SITE}/guides/"),
-        "first-edit" => format!("{SITE}/guides/first-edit/"),
-        "report" => format!("{SITE}/guides/report-a-problem/"),
+        // CapyCut: upstream's site and its Discord are Concat's, not this
+        // build's. A person who wanted a guide, a first edit or a chat would
+        // land in another project's community, so nothing here answers for
+        // those names.
+        "guides" | "first-edit" | "discord" => return None,
+        // A bug belongs in the fork's issues, where the bug is.
+        "report" => format!("{REPOSITORY}/issues"),
         "github" => REPOSITORY.to_owned(),
-        // The invite the README carries.
-        "discord" => "https://discord.gg/DVuPfpXfqP".to_owned(),
         // The notes for the release this build is, under the tag the
         // release workflow pushes.
         "release-notes" => format!("{REPOSITORY}/releases/tag/v{}", env!("CARGO_PKG_VERSION")),

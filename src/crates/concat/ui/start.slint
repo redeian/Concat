@@ -1506,7 +1506,8 @@ component VersionLine inherits HorizontalLayout {
     VerticalLayout {
         alignment: center;
         Text {
-            text: "Concat " + root.version;
+            // CapyCut: this build's own name, not upstream's.
+            text: "CapyCut " + root.version;
             color: Theme.fg-dim;
             font-family: Theme.font-technical;
             font-size: Theme.fs-sm;
@@ -1560,8 +1561,12 @@ global Learn {
         name: "report", glyph: Glyph.bug, external: true,
         title: I18n.t("start.reportProblem"), note: I18n.t("start.reportProblemNote"),
     };
-    out property <[LearnItem]> desk: [docs, guide, keys, code, chat, report];
-    out property <[LearnItem]> phone: [docs, guide, code, chat, report];
+    // CapyCut: this is a fork, not Concat. Documentation, the first-edit
+    // guide and Discord all pointed at upstream's site and its server, so they
+    // are not offered here. What is left is the build's own shortcuts, the
+    // repository a bug belongs in, and the notes for the release this is.
+    out property <[LearnItem]> desk: [keys, code];
+    out property <[LearnItem]> phone: [code];
 }
 
 // The learn cards as a grid of rows, for the wide page under the projects
