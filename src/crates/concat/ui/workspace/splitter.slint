@@ -42,11 +42,12 @@ export component ColSplitter inherits Rectangle {
         animate opacity { duration: 100ms; easing: cubic-bezier(0.4, 0, 0.2, 1); }
     }
 
-    // A little wider than the gutter it sits in. Two more pixels a side costs
-    // the panes nothing they use and turns an 8px target into a 12px one.
+    // A little wider than the gutter it sits in. Six pixels a side is a
+    // grab a hand can find without aiming: the pointer turns to a resize
+    // cursor while it is still an inch away from the line.
     touch := TouchArea {
-        x: -2px;
-        width: root.width + 4px;
+        x: -6px;
+        width: root.width + 12px;
         mouse-cursor: ew-resize;
 
         pointer-event(event) => {
@@ -80,8 +81,8 @@ export component RowSplitter inherits Rectangle {
     }
 
     touch := TouchArea {
-        y: -2px;
-        height: root.height + 4px;
+        y: -6px;
+        height: root.height + 12px;
         mouse-cursor: ns-resize;
 
         pointer-event(event) => {

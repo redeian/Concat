@@ -856,12 +856,14 @@ component PosterAction inherits Rectangle {
     width: 28px;
     height: 28px;
     border-radius: self.width / 2;
-    background: touch.has-hover ? Theme.on-scrim.with-alpha(0.24) : Theme.scrim;
+    // CapyCut: the hover inverts the button - light plate, dark glyph - because
+    // a 24%-lighter scrim on a dark poster was not a state anyone could see.
+    background: touch.has-hover ? Theme.on-scrim : Theme.scrim;
     accessible-role: button;
     accessible-label: root.label;
     accessible-action-default => { root.clicked(); }
 
-    animate background { duration: 100ms; }
+    animate background { duration: 90ms; }
 
     Icon {
         x: (parent.width - self.width) / 2;
@@ -869,7 +871,8 @@ component PosterAction inherits Rectangle {
         glyph: root.glyph;
         size: 13px;
         weight: 2.2;
-        tint: Theme.on-scrim;
+        tint: touch.has-hover ? Theme.scrim : Theme.on-scrim;
+        animate tint { duration: 90ms; }
     }
 
     touch := TouchArea {
