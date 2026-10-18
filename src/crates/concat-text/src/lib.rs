@@ -29,7 +29,7 @@
 //! stores them, so a title looks the same at 720p and 4K. Everything here
 //! converts to pixels once, at the top.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::ops::Range;
 use std::sync::{Arc, Mutex};
@@ -928,11 +928,11 @@ struct Paragraph<'a> {
 
 impl Setter<'_> {
     /// A paragraph as the lines it wraps to within `max_w` pixels. A line
-    /// may end wherever Unicode's line breaking allows - at a space, or
-    /// between two characters of a script that has none - and takes breaks
-    /// while it fits; a stretch that fits nowhere gets a line of its own
-    /// rather than being cut. No limit, one line. Space at either end of a
-    /// line is not set.
+    /// may end wherever Unicode's line breaking allows - at a space, between
+    /// two characters of a script that has none, or at a Thai cluster
+    /// boundary ([`breaks`]) - and takes breaks while it fits; a stretch that
+    /// fits nowhere gets a line of its own rather than being cut. No limit,
+    /// one line. Space at either end of a line is not set.
     fn wrap(&self, para: &Paragraph<'_>, max_w: f32) -> Vec<Line> {
         let text = para.text;
         if text.trim().is_empty() {
@@ -946,7 +946,7 @@ impl Setter<'_> {
         let mut lines = Vec::new();
         // Where the line being built may end: the last break that fitted.
         let mut fitted: Option<usize> = None;
-        for (at, kind) in unicode_linebreak::linebreaks(text) {
+        for (at, kind) in breaks(text) {
             if at <= line_start {
                 continue;
             }
@@ -1166,13 +1166,84 @@ fn bitmap(image: &ttf_parser::RasterGlyphImage<'_>) -> Option<Pixmap> {
 /// break inside a paragraph.
 const MANDATORY: &[char] = &['\u{b}', '\u{c}', '\r', '\u{85}', '\u{2028}', '\u{2029}'];
 
+/// Whether `c` is a Thai character: the consonants and the vowels and marks
+/// that hang off them, and the Thai digits.
+fn thai(c: char) -> bool {
+    matches!(c, '\u{0E01}'..='\u{0E4E}' | '\u{0E50}'..='\u{0E59}')
+}
+
+/// Whether `c` is a Thai digit, which no line may break between.
+fn thai_digit(c: char) -> bool {
+    matches!(c, '\u{0E50}'..='\u{0E59}')
+}
+
+/// A character that never starts a line: a mark that hangs off the character
+/// before it (a tone mark, a vowel written above or below, the thanthakhat
+/// that silences it), the repetition mark `ๆ`, and the abbreviation mark that
+/// stands for a word already written. Splitting a line before one of these
+/// leaves the mark alone at the start of the next line, which is how a Thai
+/// paragraph looks when it has been cut by something that does not know Thai.
+fn hangs_back(c: char) -> bool {
+    matches!(c, '\u{0E31}' | '\u{0E34}'..='\u{0E3A}' | '\u{0E45}'..='\u{0E4E}')
+}
+
+/// A character that never ends a line: a vowel written before the consonant it
+/// belongs to. `เ` at the end of a line reads as a word of its own.
+fn leads_forward(c: char) -> bool {
+    matches!(c, '\u{0E40}'..='\u{0E44}')
+}
+
+/// Whether a line may break between two characters of a Thai run.
+fn thai_break_between(before: char, after: char) -> bool {
+    thai(before)
+        && thai(after)
+        && !leads_forward(before)
+        && !hangs_back(after)
+        && !(thai_digit(before) && thai_digit(after))
+}
+
+/// The places `text` may break at: Unicode's line breaking (UAX #14), and the
+/// cluster boundaries of Thai runs, which UAX #14 does not offer.
+///
+/// UAX #14 puts Thai in class SA, "complex context": a script whose words
+/// cannot be found without a dictionary, so the algorithm declines to guess
+/// and offers no break inside a run of it. Thai also writes without spaces
+/// between words, so a Thai sentence held to a width had no break opportunity
+/// at all and ran straight past the frame instead of wrapping. A cluster
+/// boundary - between a character and the marks hung off the next one - is not
+/// a word boundary, but it is a break a Thai reader accepts, and it is what
+/// every Thai caption style on the timeline does.
+fn breaks(text: &str) -> Vec<(usize, BreakOpportunity)> {
+    let mut found: Vec<(usize, BreakOpportunity)> = unicode_linebreak::linebreaks(text).collect();
+    let held: HashSet<usize> = found.iter().map(|(at, _)| *at).collect();
+    let mut added = Vec::new();
+    let mut at = 0;
+    let mut previous: Option<char> = None;
+    for c in text.chars() {
+        if let Some(before) = previous
+            && thai_break_between(before, c)
+            && !held.contains(&at)
+        {
+            added.push((at, BreakOpportunity::Allowed));
+        }
+        at += c.len_utf8();
+        previous = Some(c);
+    }
+    if added.is_empty() {
+        return found;
+    }
+    found.extend(added);
+    found.sort_by_key(|(at, _)| *at);
+    found
+}
+
 /// The words of `range`, in reading order: the stretches between the places
 /// a line may break, less their spaces. Words as a space-separated script
 /// has them, and each character of one that has no spaces.
 fn words(text: &str, range: Range<usize>) -> Vec<Range<usize>> {
     let mut words = Vec::new();
     let mut start = range.start;
-    for (at, _) in unicode_linebreak::linebreaks(&text[range.clone()]) {
+    for (at, _) in breaks(&text[range.clone()]) {
         let at = range.start + at;
         let word = &text[start..at];
         let lead = word.len() - word.trim_start().len();
@@ -1910,6 +1981,46 @@ mod tests {
         assert_eq!(
             lowered, sorted,
             "sorted without regard to case, and once each"
+        );
+    }
+
+    /// A line never starts with a mark that hangs off the character before it,
+    /// and a Thai run has break opportunities of its own.
+    #[test]
+    fn a_thai_line_never_starts_with_a_mark() {
+        let text = "กำลังทำคลิปให้เสร็จ";
+        let found = breaks(text);
+        assert!(
+            found.len() > 1,
+            "a Thai run of eleven characters has breaks of its own"
+        );
+        for (at, _) in found {
+            if let Some(c) = text[at..].chars().next() {
+                assert!(!hangs_back(c), "a line would start with {c:?} at {at}");
+            }
+        }
+    }
+
+    /// Thai writes without spaces, and UAX #14 offers no break inside a run of
+    /// it, so a Thai title held to a width used to run past the frame uncut.
+    #[test]
+    fn a_thai_title_without_spaces_still_wraps() {
+        let fonts = Fonts::new();
+        let thai = "วันนี้เราจะมาสอนวิธีใช้เอไอช่วยตัดต่อวิดีโอให้เร็วขึ้นกว่าเดิม";
+        let one = render(&fonts, &style(thai), 640, 360).expect("renders");
+        let mut narrow = style(thai);
+        narrow.max_width = 0.3;
+        let wrapped = render(&fonts, &narrow, 640, 360).expect("renders");
+        assert!(
+            wrapped.block_width <= (0.3 * 640.0) as u32 + 1,
+            "{}",
+            wrapped.block_width
+        );
+        assert!(
+            wrapped.block_height > one.block_height,
+            "{} vs {}",
+            wrapped.block_height,
+            one.block_height
         );
     }
 
