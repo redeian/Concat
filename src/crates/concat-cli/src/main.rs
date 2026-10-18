@@ -27,6 +27,10 @@ use concat_core::timeline::{Clip, MediaRef, Timeline, Track, TrackKind};
 use concat_media::{EncodeOptions, Encoder, FrameSink, ReaderPool};
 use concat_render::{Compositor, WgpuCompositor, plan_frame};
 
+// CapyCut: the silence analysis, in a file of its own so an upstream merge
+// never has to look at it.
+mod silence;
+
 #[derive(Parser)]
 #[command(name = "concat-cli", version, about = "Concat engine command line")]
 struct Cli {
@@ -40,6 +44,28 @@ enum Command {
     Probe {
         /// The file to inspect.
         path: PathBuf,
+    },
+
+    // CapyCut: what *Remove silence* would cut, for a file rather than a
+    // project. See silence.rs.
+    /// Report the silences in a file that "Remove silence" would cut.
+    Silence {
+        /// The file to analyse.
+        path: PathBuf,
+        /// Silence threshold in dBFS. Omitted, it is measured from the file.
+        /// Negative, so hyphen values are allowed: `--threshold -35`.
+        #[arg(long, allow_hyphen_values = true)]
+        threshold: Option<f64>,
+        /// Shortest cut worth making, in seconds. Measured after padding, so
+        /// this is the length that actually leaves the timeline.
+        #[arg(long, default_value_t = 0.5)]
+        min_silence: f64,
+        /// Seconds left either side of a cut, so a word is never clipped.
+        #[arg(long, default_value_t = 0.2)]
+        padding: f64,
+        /// Shortest stretch of sound kept between two cuts, in seconds.
+        #[arg(long, default_value_t = 0.3)]
+        min_gap: f64,
     },
 
     /// Decode, composite and re-encode a clip - the end-to-end slice.
@@ -128,6 +154,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     concat_host::crash::catch();
     match Cli::parse().command {
         Command::Probe { path } => probe(&path),
+        // CapyCut: the silence analysis behind *Remove silence*.
+        Command::Silence {
+            path,
+            threshold,
+            min_silence,
+            padding,
+            min_gap,
+        } => silence::run(&path, threshold, min_silence, padding, min_gap),
         Command::Render {
             input,
             output,
