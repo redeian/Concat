@@ -297,6 +297,28 @@ engine work at all.
 array and the panel are upstream files. Every one is a marked single line or a
 small marked block, and the presets themselves live in new files.
 
+**Status after the shape work:** `SetShapeStyle` ✓, the inspector's swatches ✓
+(committed, builds clean), and `ShapeKind::Pill` ✓ with its card in the Shapes
+shelf. Emoji and the badge presets are the two left.
+
+**Badges and emoji need one thing the shelves do not have yet:** a way to place
+more than one clip from one card. The Shapes shelf places exactly one
+(`placed(shape, label)` → `AddShapeClip`), and a badge is a pill *and* its
+words, which is a `Command::Batch` of `AddShapeClip` + `AddTextClip`. The
+drop path is no better: `DropPlan::parse` (`studio.rs`, the `"shape"` arm) maps
+one payload to one clip. So the order is:
+
+1. A `place_badge(&mut self, badge: &str)` on the Studio that applies the
+   batch, and an `emoji` one that applies `AddTextClip` with a large size.
+2. A shelf card whose payload is `badge:subscribe|like|share|bell|comment|
+   notification|play`, and one whose payload is `emoji:<char>`.
+3. The callbacks that carry a card's click up: `MediaPane` → `Seat` → `Editor`
+   → `lib.rs`, the same four hops the shape swatches took and the same shape
+   of edit (one marked line each).
+
+Presets, English only: SUBSCRIBE, LIKE, SHARE, BELL, COMMENT, NOTIFICATION,
+PLAY - a pill in the clip's accent colour with white words on it.
+
 ### Auto-captions
 
 `concat-speech/src/transcribe.rs` offers six Whisper models: tiny, base, small,
