@@ -284,6 +284,9 @@ export global Editor {
     /// The Remove background section's controls; see VideoPanel. `mode` is
     /// 0 off, 1 automatic, 2 custom - the two screens are chain links.
     callback cutout-mode(mode: int);
+    /// CapyCut: a shape's paint, from the inspector's swatches.
+    callback shape-fill(value: color);
+    callback shape-stroke(value: color);
     callback cutout-tool(index: int);
     callback cutout-size(size: float);
     callback cutout-painting(on: bool);

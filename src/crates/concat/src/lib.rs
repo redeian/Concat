@@ -1453,6 +1453,13 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
     editor.on_cutout_mode(on_window!(|state, mode: i32| {
         state.cutout_mode(mode);
     }));
+    // CapyCut: a shape's paint, from the inspector's swatches.
+    editor.on_shape_fill(on_window!(|state, colour: slint::Color| {
+        state.set_shape_colour(Some(colour), None);
+    }));
+    editor.on_shape_stroke(on_window!(|state, colour: slint::Color| {
+        state.set_shape_colour(None, Some(colour));
+    }));
     editor.on_cutout_tool(on_window!(|state, index: i32| {
         state.cutout_tool(index);
     }));

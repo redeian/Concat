@@ -187,6 +187,9 @@ export component ConfigPane inherits Rectangle {
     callback clip-set(field: ClipField, value: float);
     callback clip-set-text(field: ClipTextField, value: string);
     callback clip-set-colour(field: ClipTextField, value: color);
+    /// CapyCut: a shape's paint, forwarded from the Video panel's swatches.
+    callback shape-fill(value: color);
+    callback shape-stroke(value: color);
     callback clip-commit();
     /// The Text tab's font picker and its import button; see Editor.
     in property <[string]> font-families;
@@ -654,6 +657,8 @@ export component ConfigPane inherits Rectangle {
                             root.chain-set-colour(index, key, value);
                         }
                         cutout-mode(mode) => { root.cutout-mode(mode); }
+                        shape-fill(value) => { root.shape-fill(value); }
+                        shape-stroke(value) => { root.shape-stroke(value); }
                         cutout-tool(index) => { root.cutout-tool(index); }
                         cutout-size(size) => { root.cutout-size(size); }
                         cutout-painting(on) => { root.cutout-painting(on); }

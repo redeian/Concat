@@ -10210,6 +10210,21 @@ impl Studio {
             name: clip.name.as_str().into(),
             kind: kind_of(clip),
             duration: clip.duration as f32,
+            // CapyCut: a shape's paint, for the inspector's swatches.
+            shape_fill: clip
+                .shape
+                .as_ref()
+                .map(|shape| colour_of(&shape.fill))
+                .unwrap_or_default(),
+            shape_stroke: clip
+                .shape
+                .as_ref()
+                .map(|shape| colour_of(&shape.stroke))
+                .unwrap_or_default(),
+            shape_has_stroke: clip
+                .shape
+                .as_ref()
+                .is_some_and(|shape| shape.stroke_width > 0.0 && !shape.stroke.is_empty()),
             transition_id: clip
                 .transition_in
                 .as_ref()
@@ -11845,6 +11860,37 @@ impl Studio {
         }
         self.transition_selected = None;
         self.selection = sounds;
+    }
+
+    /// Recolours the selected shape's fill or outline, as one undo step.
+    ///
+    /// The picker speaks `slint::Color`; a document keeps `#rrggbbaa`, which is
+    /// what a shape's own style parses. Picking an outline colour for a figure
+    /// that has no outline asks for one: a swatch that changes nothing visible
+    /// reads as broken, and the width is the only reason it would.
+    pub fn set_shape_colour(&mut self, fill: Option<slint::Color>, stroke: Option<slint::Color>) {
+        let Some(id) = self.sole_selection() else {
+            return;
+        };
+        self.flush_commit();
+        let mut stroke_width = None;
+        if stroke.is_some() {
+            let width = self
+                .clip(&id)
+                .and_then(|clip| clip.shape.as_ref())
+                .map(|shape| shape.stroke_width)
+                .unwrap_or(0.0);
+            if width <= 0.0 {
+                stroke_width = Some(0.006);
+            }
+        }
+        self.apply(Command::SetShapeStyle {
+            clip_id: id,
+            fill: fill.map(crate::format::hex_rgba),
+            stroke: stroke.map(crate::format::hex_rgba),
+            stroke_width,
+            size: None,
+        });
     }
 
     /// Cuts the dead air out of `id`'s sound, as one undo step.

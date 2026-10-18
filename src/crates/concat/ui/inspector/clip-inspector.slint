@@ -1035,6 +1035,9 @@ export component VideoPanel inherits VerticalLayout {
     in property <bool> mask-section: true;
 
     callback set(field: ClipField, value: float);
+    /// CapyCut: a shape's paint, from the swatches in its own section.
+    callback shape-fill(value: color);
+    callback shape-stroke(value: color);
     /// A control gesture finished: the accumulated change becomes one command.
     callback commit();
     callback chain-add(id: string);
@@ -1429,6 +1432,36 @@ export component VideoPanel inherits VerticalLayout {
     // monitor over it - and chroma key drops a colour. A key is the chroma
     // package on the chain, which is why its knobs read from the chain's
     // own rows. One at a time: ticking a block unticks the others.
+    // CapyCut: a figure's paint. It is the whole of what a shape looks like -
+    // there is no footage behind it to grade - so the swatches are the panel's
+    // first section rather than a subsection of someone else's.
+    if root.figure: Section {
+        paint := SectionHeader {
+            title: I18n.t("shapePanel.paint");
+            collapsible: true;
+            HelpButton {
+                text: I18n.t("shapePanel.paintNote");
+            }
+        }
+
+        if paint.open: SectionBody {
+
+            ColourField {
+                label: I18n.t("shapePanel.fill");
+                value: root.selected.shape-fill;
+                alpha: false;
+                changed(colour) => { root.shape-fill(colour); }
+            }
+
+            ColourField {
+                label: I18n.t("shapePanel.outline");
+                value: root.selected.shape-stroke;
+                alpha: false;
+                changed(colour) => { root.shape-stroke(colour); }
+            }
+        }
+    }
+
     if !root.figure: Section {
         cutout := SectionHeader {
             title: I18n.t("clipInspector.removeBackground");

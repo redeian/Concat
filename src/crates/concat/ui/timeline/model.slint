@@ -355,6 +355,13 @@ export struct SelectedClipData {
     /// two ramps would overlap.
     duration: float,
 
+    // CapyCut: a shape's paint, for the swatches in the inspector's Video
+    // panel. Empty strings and a false `shape-has-stroke` for anything that is
+    // not a shape, which is every other clip.
+    shape-fill: color,
+    shape-stroke: color,
+    shape-has-stroke: bool,
+
     // the transition on the cut into this clip; empty id means none
     transition-id: string,
     transition-name: string,
