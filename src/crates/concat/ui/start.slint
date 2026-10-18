@@ -877,6 +877,12 @@ component PosterAction inherits Rectangle {
         clicked => { root.clicked(); }
     }
 
+    // CapyCut: an action's own hover, so the card can keep its actions up
+    // while the pointer is on one of them. Without this the card's own
+    // has-hover drops the moment a button takes the pointer, the buttons
+    // disappear, the pointer is over the card again, and the pair flicker.
+    out property <bool> hovered: touch.has-hover;
+
     Tip {
         text: root.label;
         active: touch.has-hover;
@@ -900,14 +906,20 @@ component PosterCard inherits Pressable {
     callback revealed();
 
     property <length> inset: 6px;
-    property <bool> actions: root.touchy || root.lit || root.ring || root.project.missing;
+    /// CapyCut: hover that survives the pointer moving onto an action. The
+    /// card's own `lit` is its TouchArea's hover, and a button on top of it
+    /// takes that hover away - so the buttons would hide, the pointer would be
+    /// over the card again, and the two would flicker against each other.
+    property <bool> action-hover: show-action.hovered || remove-action.hovered;
+    property <bool> hovering: root.lit || root.action-hover;
+    property <bool> actions: root.touchy || root.hovering || root.ring || root.project.missing;
 
     label: root.project.name;
     clicked => { root.opened(); }
     deleted => { root.forgotten(); }
-    background: root.lit ? Theme.launch-raised : Theme.launch-panel;
+    background: root.hovering ? Theme.launch-raised : Theme.launch-panel;
     border-width: 1px;
-    border-color: root.lit ? Theme.line-strong : Theme.line;
+    border-color: root.hovering ? Theme.line-strong : Theme.line;
 
     animate background, border-color { duration: 120ms; easing: cubic-bezier(0.4, 0, 0.2, 1); }
 
@@ -980,20 +992,25 @@ component PosterCard inherits Pressable {
             }
         }
 
-        if root.actions: HorizontalLayout {
+        // CapyCut: mounted whether or not it shows, so the card can read each
+        // action's hover; `visible` keeps it out of the pointer's way when the
+        // card is not hovered.
+        action-row := HorizontalLayout {
+            visible: root.actions;
             x: parent.width - self.preferred-width - 8px;
             y: 8px;
             height: 28px;
             width: self.preferred-width;
             spacing: 6px;
 
-            if root.can-reveal && !root.project.missing: PosterAction {
+            show-action := PosterAction {
+                visible: root.can-reveal && !root.project.missing;
                 glyph: Glyph.folder;
                 label: I18n.t("start.showInFolder");
                 clicked => { root.revealed(); }
             }
 
-            PosterAction {
+            remove-action := PosterAction {
                 glyph: Glyph.close;
                 label: I18n.t("start.removeFromList");
                 clicked => { root.forgotten(); }
