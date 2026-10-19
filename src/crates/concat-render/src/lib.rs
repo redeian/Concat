@@ -18,6 +18,7 @@
 //! compositor that used to be the reference is kept in the tests only, as
 //! the oracle the GPU's parity suite checks it against.
 
+pub mod camera;
 pub mod compositor;
 pub mod gpu;
 pub mod metrics;

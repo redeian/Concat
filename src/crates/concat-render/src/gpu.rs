@@ -1502,6 +1502,26 @@ impl WgpuCompositor {
                 next += 1;
             }
             let below = self.render_pooled(width, height, &draws, &vertices, wgpu::Color::BLACK);
+            // CapyCut: a camera draws the stack beneath it through its own
+            // transform. Identity is skipped rather than drawn at scale one, so
+            // a recording nobody has zoomed stays pixel-identical - resampling a
+            // UI at 100% is exactly the softness this avoids.
+            let below = if crate::camera::is_identity(&treatment.transform) {
+                below
+            } else {
+                let mut moved = Vec::new();
+                let mut corners = Vec::new();
+                self.push_pooled_camera(
+                    &mut moved,
+                    &mut corners,
+                    width,
+                    height,
+                    below,
+                    1.0,
+                    &treatment.transform,
+                );
+                self.render_pooled(width, height, &moved, &corners, wgpu::Color::BLACK)
+            };
             let strength = treatment.strength.clamp(0.0, 1.0);
             if strength <= 0.0 || treatment.effects.is_empty() {
                 ground = Some(below);
@@ -1717,6 +1737,53 @@ impl WgpuCompositor {
             corner(1.0, 1.0, 1.0, 0.0),
             corner(1.0, -1.0, 1.0, 1.0),
             corner(-1.0, -1.0, 0.0, 1.0),
+        ]);
+    }
+
+    /// CapyCut: the same quad as `push_pooled`, drawn through a camera: the
+    /// picture scaled about the frame centre and moved by the transform's
+    /// offsets, which is what a zoom and a pan are. Identity never reaches
+    /// here - the caller skips the pass instead, so nothing is resampled.
+    fn push_pooled_camera(
+        &mut self,
+        draws: &mut Vec<Draw>,
+        vertices: &mut Vec<Vertex>,
+        width: u32,
+        height: u32,
+        index: usize,
+        opacity: f32,
+        transform: &concat_core::timeline::Transform,
+    ) {
+        let mask = self.mask_of(None);
+        draws.push(Draw {
+            size: (width, height),
+            texture: index,
+            blend: Blend::Normal,
+            ground: None,
+            mask,
+        });
+        let (centre_x, centre_y, half) = crate::camera::quad(transform);
+        let corner = |x: f32, y: f32, u: f32, v: f32| Vertex {
+            position: [x, y],
+            uv: [u, v],
+            opacity: opacity.clamp(0.0, 1.0),
+            scale: 1.0,
+            offset: [0.0; 3],
+            edges: [2.0, -1.0],
+            pic: [u, v],
+            shape_a: MaskUniform::NONE.a,
+            shape_b: MaskUniform::NONE.b,
+            shape_c: MaskUniform::NONE.c,
+        };
+        let (left, right) = (centre_x - half, centre_x + half);
+        let (top, bottom) = (centre_y + half, centre_y - half);
+        vertices.extend_from_slice(&[
+            corner(left, top, 0.0, 0.0),
+            corner(right, top, 1.0, 0.0),
+            corner(left, bottom, 0.0, 1.0),
+            corner(right, top, 1.0, 0.0),
+            corner(right, bottom, 1.0, 1.0),
+            corner(left, bottom, 0.0, 1.0),
         ]);
     }
 

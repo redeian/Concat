@@ -222,11 +222,27 @@ pub(crate) struct Treatment {
     pub(crate) strength: f32,
     pub(crate) ramp_in: f64,
     pub(crate) ramp_out: f64,
+    /// CapyCut: the layer as the engine sees it, which is where the camera's
+    /// keys live. A layer has no pixels, so this clip is never decoded - it is
+    /// here so `transform_at` interpolates a camera the same way it
+    /// interpolates anything else, instead of a second implementation of the
+    /// same easing drifting away from the first.
+    pub(crate) camera: Clip,
 }
 
 impl Treatment {
     pub(crate) fn covers(&self, time: Rational) -> bool {
         self.start <= time && time < self.end
+    }
+
+    /// CapyCut: what the camera is doing at `time`. Identity outside the
+    /// layer's own span, so a treatment that has not started yet cannot move
+    /// the picture it is standing over.
+    pub(crate) fn camera_at(&self, time: Rational) -> Transform {
+        if !self.covers(time) {
+            return Transform::default();
+        }
+        self.camera.transform_at(time)
     }
 
     /// The shader passes at `time`, each keyed knob at its value there. A
@@ -298,7 +314,28 @@ pub(crate) fn build_timeline(
         // stack, kept beside the timeline rather than in it.
         if clip.kind == ClipKind::Layer {
             let effects = shaded(&clip.effects);
-            if !effects.is_empty() {
+            // CapyCut: a layer with a camera and no effects is a treatment too.
+            // Before this, an empty effect list meant an empty treatment, which
+            // is why a zoom could not be a layer on its own.
+            let camera = {
+                let mut clip_of = Clip::new(MediaRef::new(&clip.path), start, duration);
+                clip_of.animation = animation_of(&clip.animation);
+                clip_of.transform = Transform {
+                    scale: clip.scale,
+                    offset_x: clip.offset_x,
+                    offset_y: clip.offset_y,
+                    rotation: clip.rotation,
+                    stretch_x: clip.stretch_x,
+                    stretch_y: clip.stretch_y,
+                };
+                clip_of
+            };
+            let framed = !clip.animation.is_empty()
+                || camera.transform.scale != 1.0
+                || camera.transform.offset_x != 0.0
+                || camera.transform.offset_y != 0.0
+                || camera.transform.rotation != 0.0;
+            if !effects.is_empty() || framed {
                 treatments.push(Treatment {
                     start,
                     end: start + duration,
@@ -307,6 +344,7 @@ pub(crate) fn build_timeline(
                     strength: clip.opacity.clamp(0.0, 1.0) as f32,
                     ramp_in: clip.fade_in.max(0.0),
                     ramp_out: clip.fade_out.max(0.0),
+                    camera,
                 });
             }
             continue;

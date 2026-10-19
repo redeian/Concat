@@ -1972,6 +1972,8 @@ fn composite_treated(
             track: treatment.track,
             effects: treatment.passes_at(time),
             strength: treatment.strength_at(time),
+            // CapyCut: where a camera says the stack beneath it goes.
+            transform: treatment.camera_at(time),
         })
         .collect();
     compositor.render(&plan)
@@ -2325,6 +2327,7 @@ pub fn preview_sources_of(
             track: treatment.track,
             effects: treatment.passes_at(time),
             strength: treatment.strength_at(time),
+            transform: treatment.camera_at(time),
         })
         .collect();
     frame_plan

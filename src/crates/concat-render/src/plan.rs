@@ -722,6 +722,12 @@ pub struct PlannedTreatment {
     pub effects: Vec<ShaderPass>,
     /// How much of the treated stack to keep over the untreated, `0..=1`.
     pub strength: f32,
+    /// CapyCut: the camera. A treatment draws the stack beneath it, and this is
+    /// where that picture lands: scale about the frame centre plus an offset,
+    /// which between them express zoom and pan. Identity - the default - draws
+    /// the stack straight through, which is what every treatment did before
+    /// this field existed.
+    pub transform: Transform,
 }
 
 /// Everything needed to draw one output frame.
