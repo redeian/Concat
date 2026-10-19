@@ -25,6 +25,8 @@ export component AnimationSection inherits VerticalLayout {
     /// The preset index is global - the looping group starts at 9 - so either
     /// grid can name its preset without knowing which group it is in.
     callback run(preset: int, side: int);
+    /// CapyCut: take the animation off one side - 0 enter, 1 during, 2 exit.
+    callback clear(side: int);
     /// The length an arrival or a departure runs for, in seconds.
     in property <float> seconds: 0.35;
     callback seconds-changed(seconds: float);
@@ -64,11 +66,22 @@ export component AnimationSection inherits VerticalLayout {
 
     spacing: 8px;
 
-    Text {
-        text: I18n.t("anim.enter");
-        color: Theme.fg-muted;
-        font-size: Theme.fs-sm;
-        height: 16px;
+    // The group's name and a way to say "none of these", which is the
+    // commonest thing to want after trying one.
+    HorizontalLayout {
+        spacing: 6px;
+        Text {
+            text: I18n.t("anim.enter");
+            color: Theme.fg-muted;
+            font-size: Theme.fs-sm;
+            height: 16px;
+            vertical-alignment: center;
+        }
+        Rectangle { }
+        Button {
+            label: I18n.t("anim.none");
+            clicked => { root.clear(0); }
+        }
     }
 
     // A grid rather than a row: nine presets in one line would be a toolbar of
@@ -84,11 +97,22 @@ export component AnimationSection inherits VerticalLayout {
         }
     }
 
-    Text {
-        text: I18n.t("anim.during");
-        color: Theme.fg-muted;
-        font-size: Theme.fs-sm;
-        height: 16px;
+    // The group's name and a way to say "none of these", which is the
+    // commonest thing to want after trying one.
+    HorizontalLayout {
+        spacing: 6px;
+        Text {
+            text: I18n.t("anim.during");
+            color: Theme.fg-muted;
+            font-size: Theme.fs-sm;
+            height: 16px;
+            vertical-alignment: center;
+        }
+        Rectangle { }
+        Button {
+            label: I18n.t("anim.none");
+            clicked => { root.clear(1); }
+        }
     }
 
     GridLayout {
@@ -102,11 +126,22 @@ export component AnimationSection inherits VerticalLayout {
         }
     }
 
-    Text {
-        text: I18n.t("anim.exit");
-        color: Theme.fg-muted;
-        font-size: Theme.fs-sm;
-        height: 16px;
+    // The group's name and a way to say "none of these", which is the
+    // commonest thing to want after trying one.
+    HorizontalLayout {
+        spacing: 6px;
+        Text {
+            text: I18n.t("anim.exit");
+            color: Theme.fg-muted;
+            font-size: Theme.fs-sm;
+            height: 16px;
+            vertical-alignment: center;
+        }
+        Rectangle { }
+        Button {
+            label: I18n.t("anim.none");
+            clicked => { root.clear(2); }
+        }
     }
 
     GridLayout {

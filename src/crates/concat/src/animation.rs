@@ -574,6 +574,34 @@ pub fn commands(clip: &Clip, preset: Preset, side: Side, seconds: f64) -> Comman
     Command::Batch { commands: batch }
 }
 
+/// The command that takes an animation off one side of the clip.
+///
+/// Every key inside that side's own stretch, on every property a preset can
+/// write - and nothing outside it. So "none" on the entrance leaves an exit
+/// alone, and "none" on the exit leaves the entrance, which is the same rule
+/// the presets themselves follow.
+pub fn clear(clip: &Clip, side: Side) -> Command {
+    let mut batch = Vec::new();
+    for property in [
+        KeyProperty::Scale,
+        KeyProperty::OffsetX,
+        KeyProperty::OffsetY,
+        KeyProperty::Rotation,
+        KeyProperty::Opacity,
+    ] {
+        for key in clip.keys_on(property) {
+            if side.owns(key.at) {
+                batch.push(Command::ClearClipKey {
+                    clip_id: clip.id.clone(),
+                    property,
+                    at: key.at,
+                });
+            }
+        }
+    }
+    Command::Batch { commands: batch }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -800,6 +828,48 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn none_clears_its_own_side_and_leaves_the_others() {
+        let mut keyed = clip();
+        for (property, at, value) in [
+            (KeyProperty::Scale, 0.05, 0.72),
+            (KeyProperty::Opacity, 0.1, 0.0),
+            (KeyProperty::Scale, 0.5, 1.0),
+            (KeyProperty::OffsetY, 0.95, 0.2),
+        ] {
+            keyed.keys.push(ClipKey {
+                property,
+                at,
+                value,
+                ease: KeyEase::OUT,
+            });
+        }
+        let Command::Batch { commands } = clear(&keyed, Side::Enter) else {
+            panic!("a batch");
+        };
+        let ats: Vec<f64> = commands
+            .iter()
+            .filter_map(|command| match command {
+                Command::ClearClipKey { at, .. } => Some(*at),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(ats.len(), 2, "the two keys before the middle: {ats:?}");
+        assert!(ats.iter().all(|at| *at < 0.5), "{ats:?}");
+
+        let Command::Batch { commands } = clear(&keyed, Side::During) else {
+            panic!("a batch");
+        };
+        let ats: Vec<f64> = commands
+            .iter()
+            .filter_map(|command| match command {
+                Command::ClearClipKey { at, .. } => Some(*at),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(ats, vec![0.5], "the middle only");
     }
 
     #[test]

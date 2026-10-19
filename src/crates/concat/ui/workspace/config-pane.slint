@@ -198,6 +198,8 @@ export component ConfigPane inherits Rectangle {
     /// CapyCut: one-click animation, forwarded from the Video and Text panels.
     callback anim(preset: int, side: int);
     callback anim-seconds(seconds: float);
+    /// CapyCut: take the animation off one side of the selected clip.
+    callback anim-clear(side: int);
     /// CapyCut: the camera's punch buttons and its two numbers.
     callback camera-punch(side: int);
     callback camera-reset();
@@ -742,6 +744,7 @@ export component ConfigPane inherits Rectangle {
                         camera-focus-x: root.selected.camera-focus-x;
                         camera-focus-y: root.selected.camera-focus-y;
                         run(preset, side) => { root.anim(preset, side); }
+                        clear(side) => { root.anim-clear(side); }
                         seconds-changed(seconds) => { root.anim-seconds(seconds); }
                         camera-punch(side) => { root.camera-punch(side); }
                         camera-reset() => { root.camera-reset(); }

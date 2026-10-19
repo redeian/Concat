@@ -12038,6 +12038,25 @@ impl Studio {
         }
     }
 
+    /// CapyCut: takes the animation off one side of the selected clip.
+    ///
+    /// Not an undo of a preset - a preset writes keys the user may have moved
+    /// since - but the same thing said plainly: this end of the clip has no
+    /// animation on it any more.
+    pub fn clear_animation(&mut self, side: i32) {
+        let Some(side) = crate::animation::Side::from_index(side) else {
+            return;
+        };
+        let Some(clip_id) = self.sole_selection() else {
+            return;
+        };
+        let Some(clip) = self.clip(&clip_id).cloned() else {
+            return;
+        };
+        self.flush_commit();
+        self.apply(crate::animation::clear(&clip, side));
+    }
+
     /// CapyCut: punches the camera in, or out, at the playhead.
     ///
     /// The camera is a layer - one clip spanning however many segments it

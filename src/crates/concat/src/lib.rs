@@ -1479,6 +1479,10 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
     editor.on_anim(on_window!(|state, preset: i32, side: i32| {
         state.apply_animation(preset, side);
     }));
+    // CapyCut: "None" - the animation off one side of the clip.
+    editor.on_anim_clear(on_window!(|state, side: i32| {
+        state.clear_animation(side);
+    }));
     editor.on_anim_seconds(on_window!(|state, seconds: f32| {
         state.set_animation_seconds(f64::from(seconds));
     }));
