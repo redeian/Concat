@@ -192,6 +192,24 @@ impl Strip {
     }
 }
 
+/// Whether a frame is one flat colour to within a pixel or two - a blank page,
+/// a fade to black. Enhancing one says nothing about the model, so the panel
+/// says so rather than showing two identical white rectangles.
+fn is_flat(frame: &concat_core::Frame) -> bool {
+    let pixels = frame.pixels();
+    let Some(first) = pixels.get(..4) else {
+        return true;
+    };
+    let close = |pixel: &[u8]| {
+        pixel.iter()
+            .zip(first)
+            .all(|(value, anchor)| value.abs_diff(*anchor) <= 2)
+    };
+    let total = pixels.chunks_exact(4).count().max(1);
+    let same = pixels.chunks_exact(4).filter(|pixel| close(pixel)).count();
+    same * 100 / total >= 98
+}
+
 /// The key a cell's strip is held under: the media and the cell.
 fn window_key(media_id: &str, level: u32, cell: u32) -> String {
     format!("{media_id}|{level}|{cell}")
@@ -7000,6 +7018,9 @@ impl Studio {
                 studio.enhance_previewing = None;
                 match result {
                     Ok(preview) => {
+                        if is_flat(&preview.plain) {
+                            studio.notify(&t("studio.enhanceFlatFrame"), false);
+                        }
                         let mut made = EnhancePreview {
                             clip_id,
                             media_id,

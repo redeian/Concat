@@ -944,5 +944,6 @@
   "mediaPane.cameraLayer": "Camera (zoom)",
   "camera.move": "Reframe time",
   "camera.softAt2x": "Past 2x the picture softens - record at a higher resolution for a sharper push",
-  "anim.none": "None"
+  "anim.none": "None",
+  "studio.enhanceFlatFrame": "This frame is almost all one colour - move the playhead to a frame with detail to judge the result"
 }
