@@ -193,6 +193,9 @@ export component ConfigPane inherits Rectangle {
     /// CapyCut: *Remove silence*'s four knobs and its cut, from the Audio panel.
     callback silence-param(index: int, value: float);
     callback silence-cut();
+    /// CapyCut: one-click animation, forwarded from the Video and Text panels.
+    callback anim(preset: int, side: int);
+    callback anim-seconds(seconds: float);
     callback clip-commit();
     /// The Text tab's font picker and its import button; see Editor.
     in property <[string]> font-families;
@@ -662,6 +665,8 @@ export component ConfigPane inherits Rectangle {
                         cutout-mode(mode) => { root.cutout-mode(mode); }
                         shape-fill(value) => { root.shape-fill(value); }
                         shape-stroke(value) => { root.shape-stroke(value); }
+                        anim(preset, side) => { root.anim(preset, side); }
+                        anim-seconds(seconds) => { root.anim-seconds(seconds); }
                         cutout-tool(index) => { root.cutout-tool(index); }
                         cutout-size(size) => { root.cutout-size(size); }
                         cutout-painting(on) => { root.cutout-painting(on); }

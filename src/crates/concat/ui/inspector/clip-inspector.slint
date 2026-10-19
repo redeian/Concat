@@ -29,6 +29,8 @@ import {
     Switch,
     SwitchRow,
 } from "controls.slint";
+// CapyCut: one-click animation, in a file of its own.
+import { AnimationSection } from "./animation-section.slint";
 import {
     ColorWheel,
     CurveData,
@@ -1038,6 +1040,9 @@ export component VideoPanel inherits VerticalLayout {
     /// CapyCut: a shape's paint, from the swatches in its own section.
     callback shape-fill(value: color);
     callback shape-stroke(value: color);
+    /// CapyCut: one-click animation - which preset, which end, how long.
+    callback anim(preset: int, side: int);
+    callback anim-seconds(seconds: float);
     /// A control gesture finished: the accumulated change becomes one command.
     callback commit();
     callback chain-add(id: string);
@@ -1432,6 +1437,21 @@ export component VideoPanel inherits VerticalLayout {
     // monitor over it - and chroma key drops a colour. A key is the chroma
     // package on the chain, which is why its knobs read from the chain's
     // own rows. One at a time: ticking a block unticks the others.
+    // CapyCut: one-click animation, for a figure as much as a title.
+    Section {
+        move := SectionHeader {
+            title: I18n.t("anim.title");
+            collapsible: true;
+        }
+        if move.open: SectionBody {
+            AnimationSection {
+                seconds: root.selected.animation-seconds;
+                run(preset, side) => { root.anim(preset, side); }
+                seconds-changed(seconds) => { root.anim-seconds(seconds); }
+            }
+        }
+    }
+
     // CapyCut: a figure's paint. It is the whole of what a shape looks like -
     // there is no footage behind it to grade - so the swatches are the panel's
     // first section rather than a subsection of someone else's.

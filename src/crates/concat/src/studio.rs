@@ -10236,6 +10236,8 @@ impl Studio {
             silence_min_cut: self.prefs.silence.min_cut as f32,
             silence_padding: self.prefs.silence.padding as f32,
             silence_gap: self.prefs.silence.gap as f32,
+            // CapyCut: how long an animation preset runs, from the same prefs.
+            animation_seconds: self.prefs.animation.seconds as f32,
             transition_id: clip
                 .transition_in
                 .as_ref()
@@ -11949,7 +11951,26 @@ impl Studio {
             return;
         };
         self.flush_commit();
-        self.apply(crate::animation::commands(&clip, preset, side));
+        self.apply(crate::animation::commands(
+            &clip,
+            preset,
+            side,
+            self.prefs.animation.seconds,
+        ));
+    }
+
+    /// Sets how long a one-click animation runs, and remembers it.
+    ///
+    /// Held to the range the presets accept: under a fifth of a second nothing
+    /// is legible, and over a second and a half a pop stops being an entrance
+    /// and becomes a move of its own.
+    pub fn set_animation_seconds(&mut self, seconds: f64) {
+        if !seconds.is_finite() {
+            return;
+        }
+        self.prefs.animation.seconds = seconds
+            .clamp(crate::animation::MIN_SECONDS, crate::animation::MAX_SECONDS);
+        self.prefs.save(&self.host.dirs);
     }
 
     /// Places one of the sticker shelf's cards at the playhead.

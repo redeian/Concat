@@ -12,11 +12,15 @@
 import { I18n } from "../i18n.slint";
 import { Theme } from "../theme/theme.slint";
 import { Button } from "../primitives/modal.slint";
+import { Param, ParamFormat } from "./controls.slint";
 
 export component AnimationSection inherits VerticalLayout {
     /// `run(0, 0)` is Elastic pop on the enter. Preset: 0 pop, 1 fade,
     /// 2 slide. Side: 0 enter, 1 exit.
     callback run(preset: int, side: int);
+    /// The length every preset runs for, in seconds.
+    in property <float> seconds: 0.35;
+    callback seconds-changed(seconds: float);
 
     property <[string]> presets: [
         I18n.t("anim.elasticPop"),
@@ -56,5 +60,19 @@ export component AnimationSection inherits VerticalLayout {
             block: true;
             clicked => { root.run(index, 1); }
         }
+    }
+
+    // How long the preset runs. One number for all of them: an edit has one
+    // tempo, and a title that pops slower than its neighbour reads as a
+    // mistake rather than a choice.
+    Param {
+        label: I18n.t("anim.duration");
+        value: root.seconds;
+        minimum: 0.15;
+        maximum: 1.5;
+        step: 0.05;
+        default-value: 0.35;
+        fmt: ParamFormat.seconds2;
+        changed(v) => { root.seconds-changed(v); }
     }
 }

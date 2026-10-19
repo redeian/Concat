@@ -293,6 +293,9 @@ export global Editor {
     /// CapyCut: *Remove silence*'s knobs and its cut, from the Audio panel.
     callback silence-param(index: int, value: float);
     callback silence-cut();
+    /// CapyCut: one-click animation, from the inspector's Animation section.
+    callback anim(preset: int, side: int);
+    callback anim-seconds(seconds: float);
     callback cutout-tool(index: int);
     callback cutout-size(size: float);
     callback cutout-painting(on: bool);

@@ -47,10 +47,30 @@ impl Default for SilencePrefs {
     }
 }
 
+/// CapyCut: how long a one-click animation runs, in seconds. A pop that reads
+/// as a pop is under half a second; see `animation` for why.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct AnimPrefs {
+    /// Seconds, held to what the presets accept.
+    pub seconds: f64,
+}
+
+impl Default for AnimPrefs {
+    fn default() -> Self {
+        AnimPrefs {
+            seconds: crate::animation::DEFAULT_SECONDS,
+        }
+    }
+}
+
 /// Remembered preferences.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Preferences {
+    // CapyCut: how long an animation preset runs. One number for every preset,
+    // because an edit has one tempo.
+    pub animation: AnimPrefs,
     // CapyCut: what *Remove silence* cuts with, as last set in the Audio tab.
     // Its own struct so the four values travel together in the prefs file.
     pub silence: SilencePrefs,

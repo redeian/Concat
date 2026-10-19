@@ -1473,6 +1473,13 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
     editor.on_silence_cut(on_window!(|state| {
         state.silence_cut();
     }));
+    // CapyCut: one-click animation, from the inspector.
+    editor.on_anim(on_window!(|state, preset: i32, side: i32| {
+        state.apply_animation(preset, side);
+    }));
+    editor.on_anim_seconds(on_window!(|state, seconds: f32| {
+        state.set_animation_seconds(f64::from(seconds));
+    }));
     editor.on_cutout_tool(on_window!(|state, index: i32| {
         state.cutout_tool(index);
     }));
