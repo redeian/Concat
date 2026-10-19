@@ -593,6 +593,10 @@ component Guide inherits Rectangle {
 component StageOverlay inherits Rectangle {
     in property <[StageItemData]> items;
     in property <[StageGuideData]> guides;
+    /// CapyCut: `[on, focus-x, focus-y]` for the camera, or empty when the
+    /// selection cannot be one. Drawn here so it sits over the picture, and
+    /// grabbed by the stage's own press handling in Rust.
+    in property <[float]> camera;
     /// The brush stroke in flight, and whether a press paints; see Editor.
     in property <string> stroke-path;
     in property <float> stroke-width;
@@ -615,6 +619,32 @@ component StageOverlay inherits Rectangle {
     callback pan-released();
 
     background: transparent;
+
+    // CapyCut: the camera's focus ring. Where the picture will be held still
+    // when it zooms, drawn where it actually is so a press can land on it -
+    // the aiming itself is Rust's, through the floor's press below.
+    if root.camera.length == 3 && root.camera[0] > 0.5: Rectangle {
+        x: root.camera[1] * (root.width - self.width);
+        y: root.camera[2] * (root.height - self.height);
+        width: 26px;
+        height: 26px;
+        border-radius: 13px;
+        border-width: 2px;
+        border-color: #7ce38b;
+        background: #7ce38b22;
+        // A crosshair so the exact point is legible, not just the ring.
+        VerticalLayout {
+            alignment: center;
+            HorizontalLayout {
+                alignment: center;
+                Rectangle { width: 10px; height: 1px; background: #7ce38b; }
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            Rectangle { width: 1px; height: 10px; background: #7ce38b; }
+        }
+    }
 
     // The floor. Every press that no grip took lands here; Rust hit-tests
     // it against the pictures, rotation and stacking included.
@@ -756,6 +786,8 @@ export component PreviewPane inherits Rectangle {
     /// Every picture under the playhead, for the selection drawn over the
     /// frame. See StageOverlay.
     in property <[StageItemData]> stage-items;
+    /// CapyCut: the camera's focus ring, `[on, x, y]`; see StageOverlay.
+    in property <[float]> camera-marker;
     /// The cutout brush's stroke in flight, and whether the stage paints.
     in property <string> stroke-path;
     in property <float> stroke-width;
@@ -1062,6 +1094,7 @@ export component PreviewPane inherits Rectangle {
                 height: stage.height;
                 items: root.stage-items;
                 guides: root.stage-guides;
+                camera: root.camera-marker;
                 stroke-path: root.stroke-path;
                 stroke-width: root.stroke-width;
                 stroke-erase: root.stroke-erase;

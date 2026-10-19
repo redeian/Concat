@@ -427,6 +427,9 @@ pub struct MoveOrigin {
 /// A pointer gesture in flight, previewed on the echo.
 pub enum Gesture {
     None,
+    /// CapyCut: the camera's focus point being dragged on the stage. Nothing
+    /// else moves while it is: the press landed on the ring, not on a picture.
+    CameraAim,
     Move {
         /// The clip actually grabbed; it is the one that snaps.
         primary: String,
@@ -4736,6 +4739,12 @@ impl Studio {
     pub fn clip_dragged(&mut self, seconds: f32, pixels: f32) {
         let gesture = std::mem::replace(&mut self.gesture, Gesture::None);
         match &gesture {
+            // CapyCut: aiming the camera is a stage gesture; the lanes see
+            // nothing of it.
+            Gesture::CameraAim => {
+                self.gesture = gesture;
+                return;
+            }
             Gesture::Move {
                 primary,
                 origins,
@@ -4897,10 +4906,17 @@ impl Studio {
     /// The pointer let go: the whole gesture becomes one command.
     pub fn clip_released(&mut self) {
         let gesture = std::mem::replace(&mut self.gesture, Gesture::None);
+        // CapyCut: the camera's aim is already written by `stage_dragged`; a
+        // release only ends it.
+        if matches!(gesture, Gesture::CameraAim) {
+            self.gesture = Gesture::None;
+            return;
+        }
         let Some(echo) = self.echo.as_ref() else {
             return;
         };
         match gesture {
+            Gesture::CameraAim => {}
             Gesture::Move { origins, .. } => {
                 let moves: Vec<ClipMove> = origins
                     .iter()
@@ -5792,6 +5808,15 @@ impl Studio {
     /// of everything selected that is under the playhead. Empty stage
     /// clears the selection, as an empty lane does.
     pub fn stage_pressed(&mut self, x: f32, y: f32, additive: bool) {
+        // CapyCut: a press on the camera's focus ring aims the camera. Without
+        // this the only way to say where to zoom was two numbers in a panel,
+        // which is a poor way to point at something you can see.
+        if self.camera_selected() && self.near_camera_focus(f64::from(x), f64::from(y)) {
+            self.gesture = Gesture::CameraAim;
+            self.set_camera(1, f64::from(x));
+            self.set_camera(2, f64::from(y));
+            return;
+        }
         if let Some(clip) = self.paint_target() {
             let point = self.stage_to_source(&clip, f64::from(x), f64::from(y));
             self.gesture = Gesture::Paint {
@@ -5982,6 +6007,13 @@ impl Studio {
     /// the monitor composites it.
     pub fn stage_dragged(&mut self, x: f32, y: f32, snap: bool) {
         let mut gesture = std::mem::replace(&mut self.gesture, Gesture::None);
+        // CapyCut: aiming the camera follows the pointer and nothing else.
+        if matches!(gesture, Gesture::CameraAim) {
+            self.set_camera(1, f64::from(x).clamp(0.0, 1.0));
+            self.set_camera(2, f64::from(y).clamp(0.0, 1.0));
+            self.gesture = gesture;
+            return;
+        }
         if let Gesture::Paint {
             clip,
             points,
@@ -12013,6 +12045,37 @@ impl Studio {
         };
         self.flush_commit();
         self.apply(crate::camera::reset(&clip));
+    }
+
+    /// CapyCut: whether the selection is a layer, which is the only thing that
+    /// can be a camera.
+    fn camera_selected(&self) -> bool {
+        self.sole_selection()
+            .and_then(|id| self.clip(&id))
+            .is_some_and(|clip| clip.kind == model::ClipKind::Layer)
+    }
+
+    /// CapyCut: whether a press in frame fractions landed on the focus ring.
+    /// Generous on purpose - the ring is a target to grab, not a bullseye.
+    fn near_camera_focus(&self, x: f64, y: f64) -> bool {
+        let reach = 0.04;
+        (x - self.prefs.camera.focus_x).abs() <= reach
+            && (y - self.prefs.camera.focus_y).abs() <= reach
+    }
+
+    /// CapyCut: what the stage draws for the camera, as `[on, x, y]`.
+    ///
+    /// A flat list because the whole of it goes through one property: the stage
+    /// needs to know whether to draw a ring and where, and nothing else.
+    pub fn camera_marker(&self) -> Vec<f32> {
+        if !self.camera_selected() {
+            return Vec::new();
+        }
+        vec![
+            1.0,
+            self.prefs.camera.focus_x as f32,
+            self.prefs.camera.focus_y as f32,
+        ]
     }
 
     /// CapyCut: the camera's zoom and its focus point, remembered.

@@ -2,6 +2,8 @@
 // SPDX-FileCopyrightText: 2026 Jareer and Concat contributors
 
 import { Theme } from "../theme/theme.slint";
+// CapyCut: ClipKind, so the stage knows when the selection can be a camera.
+import { ClipKind } from "../timeline/model.slint";
 import { Payload } from "../util.slint";
 import { DockSide } from "../dock.slint";
 import { PaneKind } from "pane-switcher.slint";
@@ -181,6 +183,14 @@ export component Seat inherits Rectangle {
             clip-name: Editor.preview-clip-name;
             frame: Editor.preview-frame;
             stage-items: SourcePreview.open ? [] : Editor.stage-items;
+            // CapyCut: the camera's ring, straight from the selection - the
+            // same data the inspector's camera panel shows, so the ring and the
+            // numbers can never disagree.
+            camera-marker: [
+                !SourcePreview.open && Editor.selected-clip.kind == ClipKind.filter ? 1.0 : 0.0,
+                Editor.selected-clip.camera-focus-x,
+                Editor.selected-clip.camera-focus-y,
+            ];
             stage-guides: Editor.stage-guides;
             stroke-path: Editor.stroke-path;
             stroke-width: Editor.stroke-width;
