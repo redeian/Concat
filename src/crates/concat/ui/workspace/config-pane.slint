@@ -16,6 +16,8 @@ import {
     CurveData, CurveGroupData, WheelData, WheelGroupData,
 } from "../inspector/grading.slint";
 import { TextPanel } from "../inspector/text-panel.slint";
+// CapyCut: the Animation tab's panel.
+import { AnimationSection } from "../inspector/animation-section.slint";
 import {
     ClipField, ClipKind, ClipTextField, SelectedClipData, SelectedTransitionData,
 } from "../timeline/model.slint";
@@ -244,20 +246,20 @@ export component ConfigPane inherits Rectangle {
     /// panel it grades everything beneath it with, and its chain - are the
     /// tab's sections, so an adjustment layer is graded the way a clip is.
     property <bool> is-layer: root.selected.kind == ClipKind.filter;
-    property <[string]> tabs: root.selected.batch-volume ? ["Audio"] : root.is-text ? ["Text"]
+    property <[string]> tabs: root.selected.batch-volume ? ["Audio"] : root.is-text ? ["Text", "Animation"]
         : root.is-layer ? ["Filter"]
-        : root.is-shape ? ["Video"]
-        : root.is-image ? ["Video", "Effects"]
+        : root.is-shape ? ["Video", "Animation"]
+        : root.is-image ? ["Video", "Effects", "Animation"]
         : root.is-audio ? ["Audio"]
-        : ["Video", "Audio", "Effects"];
+        : ["Video", "Audio", "Effects", "Animation"];
     /// The same tabs in the interface's language. `tabs` stays English,
     /// because the panels are picked by comparing against it.
-    property <[string]> tabs-shown: root.selected.batch-volume ? [I18n.t("common.audio")] : root.is-text ? [I18n.t("common.text")]
+    property <[string]> tabs-shown: root.selected.batch-volume ? [I18n.t("common.audio")] : root.is-text ? [I18n.t("common.text"), I18n.t("configPane.animation")]
         : root.is-layer ? [I18n.t("configPane.filter")]
-        : root.is-shape ? [I18n.t("configPane.vectorImage")]
-        : root.is-image ? [I18n.t("common.video"), I18n.t("common.effects")]
+        : root.is-shape ? [I18n.t("configPane.vectorImage"), I18n.t("configPane.animation")]
+        : root.is-image ? [I18n.t("common.video"), I18n.t("common.effects"), I18n.t("configPane.animation")]
         : root.is-audio ? [I18n.t("common.audio")]
-        : [I18n.t("common.video"), I18n.t("common.audio"), I18n.t("common.effects")];
+        : [I18n.t("common.video"), I18n.t("common.audio"), I18n.t("common.effects"), I18n.t("configPane.animation")];
     /// A one-segment segmented control is a label wearing a costume, so a lone
     /// tab renders as the panel's plain heading instead.
     property <bool> single: root.tabs.length < 2;
@@ -295,6 +297,9 @@ export component ConfigPane inherits Rectangle {
             ? (root.selected.batch-volume ? ["Sound"] : ["Sound", "AudioEffects"])
         : root.heading == "Effects" ? ["Effects"]
         : root.heading == "Text" ? ["Text"]
+        // CapyCut: a page of its own, so animations can keep being added
+        // without crowding the panels a clip is trimmed and graded in.
+        : root.heading == "Animation" ? ["Animation"]
         : ["Layer", "Adjust", "Effects"];
     /// The sections as the dropdown shows them; see `tabs-shown`.
     property <[string]> sections-shown: root.heading == "Video"
@@ -305,6 +310,7 @@ export component ConfigPane inherits Rectangle {
                 : [I18n.t("configPane.basic"), I18n.t("configPane.audioEffects")])
         : root.heading == "Effects" ? [I18n.t("common.effects")]
         : root.heading == "Text" ? [I18n.t("common.text")]
+        : root.heading == "Animation" ? [I18n.t("configPane.animation")]
         : [I18n.t("common.layer"), I18n.t("common.adjust"), I18n.t("common.effects")];
 
     // Each tab remembers its own section, so flipping to Audio and back
@@ -720,6 +726,18 @@ export component ConfigPane inherits Rectangle {
 
                 // Audio: the level and fades, then the voice and room chain
                 // under them, the way an audio tab is usually laid out.
+                // CapyCut: the animation page. Its own tab because there is a
+                // lot of it to come - presets by kind, per-property curves,
+                // timing against the beat - and none of it belongs in the
+                // panel where a clip is trimmed and graded.
+                if root.showing == "Animation": VerticalLayout {
+                    AnimationSection {
+                        seconds: root.selected.animation-seconds;
+                        run(preset, side) => { root.anim(preset, side); }
+                        seconds-changed(seconds) => { root.anim-seconds(seconds); }
+                    }
+                }
+
                 if root.showing == "Sound": VerticalLayout {
                     AudioPanel {
                         selected: root.selected;

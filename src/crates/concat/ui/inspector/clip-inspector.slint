@@ -1437,21 +1437,6 @@ export component VideoPanel inherits VerticalLayout {
     // monitor over it - and chroma key drops a colour. A key is the chroma
     // package on the chain, which is why its knobs read from the chain's
     // own rows. One at a time: ticking a block unticks the others.
-    // CapyCut: one-click animation, for a figure as much as a title.
-    Section {
-        move := SectionHeader {
-            title: I18n.t("anim.title");
-            collapsible: true;
-        }
-        if move.open: SectionBody {
-            AnimationSection {
-                seconds: root.selected.animation-seconds;
-                run(preset, side) => { root.anim(preset, side); }
-                seconds-changed(seconds) => { root.anim-seconds(seconds); }
-            }
-        }
-    }
-
     // CapyCut: a figure's paint. It is the whole of what a shape looks like -
     // there is no footage behind it to grade - so the swatches are the panel's
     // first section rather than a subsection of someone else's.
