@@ -72,6 +72,17 @@ pub fn flatten_timeline_in(
                     effects: clip.video_effects.clone(),
                     opacity: clip.opacity,
                     has_audio: Some(false),
+                    // CapyCut: a layer is also a camera, so its transform and
+                    // its keys travel with it. Without these a zoom written on
+                    // the layer in the inspector reached flatten and stopped,
+                    // which is exactly what "the picture does not move" was.
+                    animation: export_keys(clip),
+                    scale: export_base(clip, KeyProperty::Scale),
+                    offset_x: export_base(clip, KeyProperty::OffsetX),
+                    offset_y: export_base(clip, KeyProperty::OffsetY),
+                    rotation: export_base(clip, KeyProperty::Rotation),
+                    stretch_x: clip.stretch_x,
+                    stretch_y: clip.stretch_y,
                     ..ExportClip::blank(ClipKind::Layer, clip.start, clip.duration, index)
                 });
             }
