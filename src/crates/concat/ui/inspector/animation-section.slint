@@ -10,15 +10,83 @@
 // animates; the panel only sends which preset, and which part of the clip it
 // belongs to.
 //
-// Three groups, because that is what an edit is: how it arrives, what it does
-// while it is there, and how it leaves. The arrivals and the departures are the
-// same presets read in opposite directions, so the same nine names appear twice
-// and the side is all that tells them apart.
+// Laid out the way an inspector panel is meant to read: a group is a name, a
+// quiet "none", and a grid of targets, with more air between groups than inside
+// one. The rhythm is 4 / 6 / 14 - tiles 4 apart, a name 6 above its tiles,
+// groups 14 apart - so the eye sorts the three groups before it reads a word.
+//
+// Targets are tiles rather than buttons because there are twenty-two of them
+// and they are chosen by shape as much as by name: a tile that lights up when
+// it is the one in force says more than a word does. That lit state is local
+// and lasts until another is picked, which is what a press needs to answer
+// with.
 
 import { I18n } from "../i18n.slint";
 import { Theme } from "../theme/theme.slint";
-import { Button } from "../primitives/modal.slint";
 import { Param, ParamFormat } from "./controls.slint";
+
+// One preset: a soft target that lights up when it is the one in force.
+component PresetTile inherits Rectangle {
+    in property <string> label;
+    in-out property <bool> chosen: false;
+    callback clicked();
+
+    height: 32px;
+    border-radius: Theme.r;
+    background: root.chosen ? Theme.accent-soft
+        : touch.has-hover ? Theme.field-hover : Theme.field;
+    border-width: 1px;
+    border-color: root.chosen ? Theme.accent : Theme.line;
+
+    Text {
+        text: root.label;
+        color: root.chosen ? Theme.accent : touch.has-hover ? Theme.fg : Theme.fg-muted;
+        font-size: Theme.fs;
+        font-weight: root.chosen ? Theme.weight-title : Theme.weight-body;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// A group's name and the way to say "none of these", which is the commonest
+// thing to want after trying one. A quiet text action, placed beside the thing
+// it undoes rather than as a third button in the grid.
+component GroupHeader inherits HorizontalLayout {
+    in property <string> title;
+    callback cleared();
+
+    height: 20px;
+    spacing: 8px;
+
+    Text {
+        text: root.title;
+        color: Theme.fg-muted;
+        font-size: Theme.fs-sm;
+        font-weight: Theme.weight-title;
+        letter-spacing: 0.4px;
+        vertical-alignment: center;
+    }
+
+    Rectangle { }
+
+    Text {
+        text: I18n.t("anim.none");
+        color: none-touch.has-hover ? Theme.fg : Theme.fg-dim;
+        font-size: Theme.fs-sm;
+        vertical-alignment: center;
+
+        none-touch := TouchArea {
+            mouse-cursor: pointer;
+            clicked => { root.cleared(); }
+        }
+    }
+}
 
 export component AnimationSection inherits VerticalLayout {
     /// Which preset, and which part of the clip: 0 enter, 1 during, 2 exit.
@@ -45,6 +113,12 @@ export component AnimationSection inherits VerticalLayout {
     /// How many presets come before the looping ones; see `Preset::DURING`.
     property <int> loops-from: 9;
 
+    // The one in force, per group. A hint rather than state the document owns:
+    // it lights the last thing pressed, so a press has an answer on screen.
+    in-out property <int> chosen-enter: -1;
+    in-out property <int> chosen-during: -1;
+    in-out property <int> chosen-exit: -1;
+
     property <[string]> arrivals: [
         I18n.t("anim.elasticPop"),
         I18n.t("anim.fade"),
@@ -64,170 +138,90 @@ export component AnimationSection inherits VerticalLayout {
         I18n.t("anim.breathe"),
     ];
 
-    spacing: 8px;
+    padding: 12px;
+    spacing: 14px;
 
-    // The group's name and a way to say "none of these", which is the
-    // commonest thing to want after trying one.
-    HorizontalLayout {
-        spacing: 6px;
-        Text {
-            text: I18n.t("anim.enter");
-            color: Theme.fg-muted;
-            font-size: Theme.fs-sm;
-            height: 16px;
-            vertical-alignment: center;
-        }
-        Rectangle { }
-        Button {
-            label: I18n.t("anim.none");
-            clicked => { root.clear(0); }
-        }
-    }
-
-    // A grid rather than a row: nine presets in one line would be a toolbar of
-    // unreadable slivers, and this list is going to keep growing.
-    GridLayout {
-        spacing: 6px;
-        for name[index] in root.arrivals: Button {
-            row: Math.floor(index / 3);
-            col: Math.mod(index, 3);
-            label: name;
-            block: true;
-            clicked => { root.run(index, 0); }
-        }
-    }
-
-    // The group's name and a way to say "none of these", which is the
-    // commonest thing to want after trying one.
-    HorizontalLayout {
-        spacing: 6px;
-        Text {
-            text: I18n.t("anim.during");
-            color: Theme.fg-muted;
-            font-size: Theme.fs-sm;
-            height: 16px;
-            vertical-alignment: center;
-        }
-        Rectangle { }
-        Button {
-            label: I18n.t("anim.none");
-            clicked => { root.clear(1); }
-        }
-    }
-
-    GridLayout {
-        spacing: 6px;
-        for name[index] in root.loops: Button {
-            row: Math.floor(index / 2);
-            col: Math.mod(index, 2);
-            label: name;
-            block: true;
-            clicked => { root.run(index + root.loops-from, 1); }
-        }
-    }
-
-    // The group's name and a way to say "none of these", which is the
-    // commonest thing to want after trying one.
-    HorizontalLayout {
-        spacing: 6px;
-        Text {
-            text: I18n.t("anim.exit");
-            color: Theme.fg-muted;
-            font-size: Theme.fs-sm;
-            height: 16px;
-            vertical-alignment: center;
-        }
-        Rectangle { }
-        Button {
-            label: I18n.t("anim.none");
-            clicked => { root.clear(2); }
-        }
-    }
-
-    GridLayout {
-        spacing: 6px;
-        for name[index] in root.arrivals: Button {
-            row: Math.floor(index / 3);
-            col: Math.mod(index, 3);
-            label: name;
-            block: true;
-            clicked => { root.run(index, 2); }
-        }
-    }
-
-    // CapyCut: the camera. A zoom is a layer whose transform moves, so these
-    // controls write keys on scale and offsets - the same keys the curve editor
-    // shows - with the hold, move, hold shape a tutorial needs.
-    if root.camera: VerticalLayout {
+    // ── enter ──────────────────────────────────────────────────────────────
+    VerticalLayout {
         spacing: 6px;
 
-        Text {
-            text: I18n.t("camera.title");
-            color: Theme.fg-muted;
-            font-size: Theme.fs-sm;
-            height: 16px;
-        }
-
-        HorizontalLayout {
-            spacing: 6px;
-            Button {
-                label: I18n.t("camera.in");
-                block: true;
-                clicked => { root.camera-punch(0); }
-            }
-            Button {
-                label: I18n.t("camera.out");
-                block: true;
-                clicked => { root.camera-punch(1); }
-            }
-            Button {
-                label: I18n.t("camera.reset");
-                block: true;
-                clicked => { root.camera-reset(); }
+        GroupHeader {
+            title: I18n.t("anim.enter");
+            cleared => {
+                root.chosen-enter = -1;
+                root.clear(0);
             }
         }
 
-        Param {
-            label: I18n.t("camera.zoom");
-            value: root.camera-zoom;
-            minimum: 1;
-            maximum: 4;
-            step: 0.1;
-            default-value: 1.5;
-            fmt: ParamFormat.rate;
-            changed(v) => { root.camera-param(0, v); }
+        GridLayout {
+            spacing: 4px;
+
+            for name[index] in root.arrivals: PresetTile {
+                row: Math.floor(index / 3);
+                col: Math.mod(index, 3);
+                label: name;
+                chosen: root.chosen-enter == index;
+                clicked => {
+                    root.chosen-enter = index;
+                    root.run(index, 0);
+                }
+            }
         }
-        Param {
-            label: I18n.t("camera.focusX");
-            value: root.camera-focus-x;
-            minimum: 0;
-            maximum: 1;
-            step: 0.01;
-            default-value: 0.5;
-            fmt: ParamFormat.fraction;
-            changed(v) => { root.camera-param(1, v); }
+    }
+
+    // ── during ─────────────────────────────────────────────────────────────
+    VerticalLayout {
+        spacing: 6px;
+
+        GroupHeader {
+            title: I18n.t("anim.during");
+            cleared => {
+                root.chosen-during = -1;
+                root.clear(1);
+            }
         }
-        Param {
-            label: I18n.t("camera.focusY");
-            value: root.camera-focus-y;
-            minimum: 0;
-            maximum: 1;
-            step: 0.01;
-            default-value: 0.5;
-            fmt: ParamFormat.fraction;
-            changed(v) => { root.camera-param(2, v); }
+
+        GridLayout {
+            spacing: 4px;
+
+            for name[index] in root.loops: PresetTile {
+                row: Math.floor(index / 2);
+                col: Math.mod(index, 2);
+                label: name;
+                chosen: root.chosen-during == index;
+                clicked => {
+                    root.chosen-during = index;
+                    root.run(index + root.loops-from, 1);
+                }
+            }
         }
-        // How long the reframe takes. Short is right: a camera that drifts is
-        // the shape a tutorial looks worse for.
-        Param {
-            label: I18n.t("camera.move");
-            value: root.camera-move-seconds;
-            minimum: 0.1;
-            maximum: 1;
-            step: 0.05;
-            default-value: 0.3;
-            fmt: ParamFormat.seconds2;
-            changed(v) => { root.camera-param(3, v); }
+    }
+
+    // ── exit ───────────────────────────────────────────────────────────────
+    VerticalLayout {
+        spacing: 6px;
+
+        GroupHeader {
+            title: I18n.t("anim.exit");
+            cleared => {
+                root.chosen-exit = -1;
+                root.clear(2);
+            }
+        }
+
+        GridLayout {
+            spacing: 4px;
+
+            for name[index] in root.arrivals: PresetTile {
+                row: Math.floor(index / 3);
+                col: Math.mod(index, 3);
+                label: name;
+                chosen: root.chosen-exit == index;
+                clicked => {
+                    root.chosen-exit = index;
+                    root.run(index, 2);
+                }
+            }
         }
     }
 
@@ -244,5 +238,108 @@ export component AnimationSection inherits VerticalLayout {
         default-value: 0.35;
         fmt: ParamFormat.seconds2;
         changed(v) => { root.seconds-changed(v); }
+    }
+
+    // ── camera ─────────────────────────────────────────────────────────────
+    // A card rather than a bare group: the camera belongs to a layer, and this
+    // is where a layer's transform is driven from. Its numbers are what the
+    // ring on the stage shows, so the two always agree.
+    if root.camera: Rectangle {
+        border-radius: Theme.r-lg;
+        background: Theme.well;
+        border-width: 1px;
+        border-color: Theme.line;
+
+        VerticalLayout {
+            padding: 12px;
+            spacing: 8px;
+
+            HorizontalLayout {
+                spacing: 8px;
+
+                Text {
+                    text: I18n.t("camera.title");
+                    color: Theme.fg;
+                    font-size: Theme.fs;
+                    font-weight: Theme.weight-title;
+                    vertical-alignment: center;
+                }
+
+                Rectangle { }
+
+                Text {
+                    text: I18n.t("camera.reset");
+                    color: reset-touch.has-hover ? Theme.fg : Theme.fg-dim;
+                    font-size: Theme.fs-sm;
+                    vertical-alignment: center;
+
+                    reset-touch := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => { root.camera-reset(); }
+                    }
+                }
+            }
+
+            GridLayout {
+                spacing: 4px;
+
+                PresetTile {
+                    row: 0;
+                    col: 0;
+                    label: I18n.t("camera.in");
+                    clicked => { root.camera-punch(0); }
+                }
+
+                PresetTile {
+                    row: 0;
+                    col: 1;
+                    label: I18n.t("camera.out");
+                    clicked => { root.camera-punch(1); }
+                }
+            }
+
+            Param {
+                label: I18n.t("camera.zoom");
+                value: root.camera-zoom;
+                minimum: 1;
+                maximum: 4;
+                step: 0.1;
+                default-value: 1.5;
+                fmt: ParamFormat.rate;
+                changed(v) => { root.camera-param(0, v); }
+            }
+            Param {
+                label: I18n.t("camera.focusX");
+                value: root.camera-focus-x;
+                minimum: 0;
+                maximum: 1;
+                step: 0.01;
+                default-value: 0.5;
+                fmt: ParamFormat.fraction;
+                changed(v) => { root.camera-param(1, v); }
+            }
+            Param {
+                label: I18n.t("camera.focusY");
+                value: root.camera-focus-y;
+                minimum: 0;
+                maximum: 1;
+                step: 0.01;
+                default-value: 0.5;
+                fmt: ParamFormat.fraction;
+                changed(v) => { root.camera-param(2, v); }
+            }
+            // Short is right: a camera that drifts is the shape a tutorial
+            // looks worse for.
+            Param {
+                label: I18n.t("camera.move");
+                value: root.camera-move-seconds;
+                minimum: 0.1;
+                maximum: 1;
+                step: 0.05;
+                default-value: 0.3;
+                fmt: ParamFormat.seconds2;
+                changed(v) => { root.camera-param(3, v); }
+            }
+        }
     }
 }
