@@ -8042,22 +8042,44 @@ impl Studio {
                 },
             );
         }
-        let lane_end = self
-            .timeline()
-            .clips
-            .iter()
-            .filter(|clip| clip.track_id == track_id)
-            .map(|clip| clip.start + clip.duration)
-            .fold(0.0, f64::max);
-        let created = self.apply_in(
-            gesture,
-            Command::AddClip {
-                media_id: source.media_id.clone(),
-                track_id: track_id.to_owned(),
-                start: lane_end,
-                ripple: false,
-            },
-        )?;
+        // CapyCut: a layer has no media to lay. It used to fall through to
+        // `AddClip` with an empty media id, which fails quietly - so copying an
+        // adjustment layer, and with it a camera, pasted nothing at all. Laid as
+        // a layer instead, and then shaped by the same `copy_commands` as
+        // everything else, which is what carries the transform, the keys and the
+        // effect chain onto the copy.
+        let created = if source.kind == model::ClipKind::Layer {
+            self.apply_in(
+                gesture,
+                Command::AddLayerClip {
+                    track_id: Some(track_id.to_owned()),
+                    start,
+                    duration: Some(source.duration),
+                    effect_id: source
+                        .video_effects
+                        .first()
+                        .map_or_else(|| ADJUST_ID.to_owned(), |effect| effect.id.clone()),
+                    name: source.name.clone(),
+                },
+            )?
+        } else {
+            let lane_end = self
+                .timeline()
+                .clips
+                .iter()
+                .filter(|clip| clip.track_id == track_id)
+                .map(|clip| clip.start + clip.duration)
+                .fold(0.0, f64::max);
+            self.apply_in(
+                gesture,
+                Command::AddClip {
+                    media_id: source.media_id.clone(),
+                    track_id: track_id.to_owned(),
+                    start: lane_end,
+                    ripple: false,
+                },
+            )?
+        };
         let placed = self.clip(&created).cloned()?;
         let commands = copy_commands(source, &placed, track_id, start);
         self.apply_in(gesture, Command::Batch { commands });
