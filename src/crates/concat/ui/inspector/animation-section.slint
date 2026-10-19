@@ -1,0 +1,60 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Jareer and Concat contributors
+// SPDX-FileCopyrightText: 2026 CapyCut contributors
+
+// CapyCut: one-click animation for the things that are not footage - titles,
+// figures, and the stickers built from either.
+//
+// A preset is a short list of keyframes on the clip's own scale, opacity and
+// offset, applied as one batch: see animation.rs. Nothing here animates; the
+// panel only sends which preset, and which end of the clip it belongs to.
+
+import { I18n } from "../i18n.slint";
+import { Theme } from "../theme/theme.slint";
+import { Button } from "../primitives/modal.slint";
+
+export component AnimationSection inherits VerticalLayout {
+    /// `run(0, 0)` is Elastic pop on the enter. Preset: 0 pop, 1 fade,
+    /// 2 slide. Side: 0 enter, 1 exit.
+    callback run(preset: int, side: int);
+
+    property <[string]> presets: [
+        I18n.t("anim.elasticPop"),
+        I18n.t("anim.fade"),
+        I18n.t("anim.slide"),
+    ];
+
+    spacing: 6px;
+
+    Text {
+        text: I18n.t("anim.enter");
+        color: Theme.fg-muted;
+        font-size: Theme.fs-sm;
+        height: 16px;
+    }
+
+    HorizontalLayout {
+        spacing: 6px;
+        for name[index] in root.presets: Button {
+            label: name;
+            block: true;
+            clicked => { root.run(index, 0); }
+        }
+    }
+
+    Text {
+        text: I18n.t("anim.exit");
+        color: Theme.fg-muted;
+        font-size: Theme.fs-sm;
+        height: 16px;
+    }
+
+    HorizontalLayout {
+        spacing: 6px;
+        for name[index] in root.presets: Button {
+            label: name;
+            block: true;
+            clicked => { root.run(index, 1); }
+        }
+    }
+}

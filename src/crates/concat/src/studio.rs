@@ -11193,6 +11193,30 @@ impl Studio {
             rows.push(rule());
         }
         let audible = clip.kind != model::ClipKind::Image;
+        // CapyCut: one-click animation. Six rows rather than a submenu -
+        // the menu has no nesting - two per preset, because an edit is
+        // described by how something arrives and how it leaves.
+        rows.push(MenuItemData {
+            kind: MenuRow::Label,
+            label: t("anim.title").into(),
+            ..Default::default()
+        });
+        for (preset, name) in [
+            (0, "anim.elasticPop"),
+            (1, "anim.fade"),
+            (2, "anim.slide"),
+        ] {
+            for (side, suffix) in [(0, "anim.in"), (1, "anim.out")] {
+                rows.push(action(
+                    &format!("animate:{preset}:{side}"),
+                    format!("{} · {}", t(name), t(suffix)),
+                    Glyph::None,
+                    "",
+                    !locked,
+                ));
+            }
+        }
+        rows.push(rule());
         rows.push(check(
             "mute",
             &t("studio.mute"),
@@ -11904,6 +11928,30 @@ impl Studio {
         });
     }
 
+    /// Applies one of the animation presets to the selected clip, as one undo
+    /// step.
+    ///
+    /// A title, a figure and a sticker built from one all take it: a preset is
+    /// nothing but keyframes on the clip's own properties, so there is no
+    /// animation engine to teach and the result stays editable with the same
+    /// diamonds the curve editor shows.
+    pub fn apply_animation(&mut self, preset: i32, side: i32) {
+        let (Some(preset), Some(side)) = (
+            crate::animation::Preset::from_index(preset),
+            crate::animation::Side::from_index(side),
+        ) else {
+            return;
+        };
+        let Some(id) = self.sole_selection() else {
+            return;
+        };
+        let Some(clip) = self.clip(&id).cloned() else {
+            return;
+        };
+        self.flush_commit();
+        self.apply(crate::animation::commands(&clip, preset, side));
+    }
+
     /// Places one of the sticker shelf's cards at the playhead.
     ///
     /// An emoji is a title whose words are the emoji: the interface draws
@@ -12104,6 +12152,16 @@ impl Studio {
                 self.inspector_jump = (self.inspector_jump.0 + 1, "Video", "Enhance");
             }
             "export-audio" => self.export_clip_audio(id),
+            // CapyCut: "animate:<preset>:<side>" from the clip menu. The clip
+            // becomes the selection, since that is what a preset writes to.
+            action if action.starts_with("animate:") => {
+                let mut parts = action.split(':').skip(1).filter_map(|part| part.parse::<i32>().ok());
+                if let (Some(preset), Some(side)) = (parts.next(), parts.next()) {
+                    self.selection = vec![id.to_owned()];
+                    self.transition_selected = None;
+                    self.apply_animation(preset, side);
+                }
+            }
             // CapyCut: the silences in this clip's sound, cut out as one undo
             // step. The analysis is silence_cut's.
             "remove-silence" => self.remove_silence(id),

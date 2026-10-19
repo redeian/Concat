@@ -32,6 +32,8 @@ mod ui {
 }
 
 mod batch_volume;
+// CapyCut: one-click animation presets for titles, shapes and stickers.
+mod animation;
 mod brand;
 mod chips;
 mod dock;
