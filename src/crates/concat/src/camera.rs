@@ -78,14 +78,21 @@ impl Side {
 }
 
 /// Where in the clip a key goes, as a fraction, held to the clip's ends.
-fn at(playhead: f64, offset: f64, duration: f64) -> f64 {
+fn at(playhead: f64, offset: f64, duration: f64, move_seconds: f64) -> f64 {
+    let move_seconds = move_seconds.clamp(MIN_MOVE_SECONDS, MAX_MOVE_SECONDS);
     let span = if duration > 0.0 {
-        MOVE_SECONDS / duration
+        move_seconds / duration
     } else {
-        MOVE_SECONDS
+        move_seconds
     };
     (playhead + offset * span).clamp(0.0, 1.0)
 }
+
+/// How short and how long a reframe may take. Below the shortest it is a jump
+/// cut; above the longest the camera is drifting, which is the Ken Burns shape
+/// this exists to avoid.
+pub const MIN_MOVE_SECONDS: f64 = 0.1;
+pub const MAX_MOVE_SECONDS: f64 = 1.0;
 
 /// The command that punches at `playhead` - the playhead's place in the clip,
 /// `0..=1` - writing the hold, the move and the hold.
@@ -94,6 +101,18 @@ fn at(playhead: f64, offset: f64, duration: f64) -> f64 {
 /// key at the end of the clip so the camera does not drift back to where it
 /// started, which is what a single pair of keys would do.
 pub fn commands(clip: &Clip, punch: Punch, side: Side, playhead: f64) -> Command {
+    commands_with_move(clip, punch, side, playhead, MOVE_SECONDS)
+}
+
+/// The same punch, with the move timed by the caller - the knob in the panel,
+/// which is remembered with the other preferences.
+pub fn commands_with_move(
+    clip: &Clip,
+    punch: Punch,
+    side: Side,
+    playhead: f64,
+    move_seconds: f64,
+) -> Command {
     let punch = punch.clamped();
     let playhead = playhead.clamp(0.0, 1.0);
     let duration = clip.duration;
@@ -102,8 +121,8 @@ pub fn commands(clip: &Clip, punch: Punch, side: Side, playhead: f64) -> Command
         Side::In => ((1.0, 0.0, 0.0), (punch.scale, offset_x, offset_y), KeyEase::OUT),
         Side::Out => ((punch.scale, offset_x, offset_y), (1.0, 0.0, 0.0), KeyEase::IN),
     };
-    let start = at(playhead, 0.0, duration);
-    let moved = at(playhead, 1.0, duration);
+    let start = at(playhead, 0.0, duration, move_seconds);
+    let moved = at(playhead, 1.0, duration, move_seconds);
     let mut batch = Vec::new();
     let mut key = |property: KeyProperty, at: f64, value: f64, ease: KeyEase| {
         batch.push(Command::SetClipKey {

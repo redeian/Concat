@@ -4047,6 +4047,18 @@ impl Studio {
         self.inspector_jump = (self.inspector_jump.0 + 1, "Layer", "Adjust");
     }
 
+    /// CapyCut: a camera layer from the Adjustments page.
+    ///
+    /// The same layer the adjustment card lays - the colour panel's package at
+    /// its defaults, which changes nothing - because a camera is a treatment
+    /// with a transform and needs no picture of its own. The difference is
+    /// where the inspector lands: on the Animation tab, where the punch is,
+    /// rather than on a colour panel a camera has no use for.
+    pub fn place_camera_layer(&mut self, label: &str) {
+        self.place_filter_layer(ADJUST_ID, label);
+        self.inspector_jump = (self.inspector_jump.0 + 1, "Layer", "Animation");
+    }
+
     /// A LUT from the Adjustments page: onto the selected clip's chain -
     /// a picture, a title, a shape or a layer - the way an effect goes on;
     /// with nothing selected, laid at the playhead as a layer of its own.
@@ -10270,10 +10282,11 @@ impl Studio {
             silence_gap: self.prefs.silence.gap as f32,
             // CapyCut: how long an animation preset runs, from the same prefs.
             animation_seconds: self.prefs.animation.seconds as f32,
-            // CapyCut: where the camera is pointed, and how far in.
+            // CapyCut: where the camera is pointed, how far in, how fast.
             camera_zoom: self.prefs.camera.zoom as f32,
             camera_focus_x: self.prefs.camera.focus_x as f32,
             camera_focus_y: self.prefs.camera.focus_y as f32,
+            camera_move_seconds: self.prefs.camera.move_seconds as f32,
             transition_id: clip
                 .transition_in
                 .as_ref()
@@ -12030,8 +12043,20 @@ impl Studio {
             focus: (self.prefs.camera.focus_x, self.prefs.camera.focus_y),
             scale: self.prefs.camera.zoom,
         };
+        // Past 2x a screen recording is showing interpolated guesses instead of
+        // characters, which is worth saying once per punch rather than never -
+        // and not worth refusing, since there are times it is what you want.
+        if self.prefs.camera.zoom > 2.0 {
+            self.notify(&t("camera.softAt2x"), false);
+        }
         self.flush_commit();
-        self.apply(crate::camera::commands(&clip, punch, side, playhead));
+        self.apply(crate::camera::commands_with_move(
+            &clip,
+            punch,
+            side,
+            playhead,
+            self.prefs.camera.move_seconds,
+        ));
     }
 
     /// CapyCut: puts the camera back where it started.
@@ -12063,21 +12088,6 @@ impl Studio {
             && (y - self.prefs.camera.focus_y).abs() <= reach
     }
 
-    /// CapyCut: what the stage draws for the camera, as `[on, x, y]`.
-    ///
-    /// A flat list because the whole of it goes through one property: the stage
-    /// needs to know whether to draw a ring and where, and nothing else.
-    pub fn camera_marker(&self) -> Vec<f32> {
-        if !self.camera_selected() {
-            return Vec::new();
-        }
-        vec![
-            1.0,
-            self.prefs.camera.focus_x as f32,
-            self.prefs.camera.focus_y as f32,
-        ]
-    }
-
     /// CapyCut: the camera's zoom and its focus point, remembered.
     ///
     /// Field 0 is how far in, 1 and 2 are where in the frame, from the top
@@ -12091,6 +12101,10 @@ impl Studio {
             0 => self.prefs.camera.zoom = value.clamp(1.0, 4.0),
             1 => self.prefs.camera.focus_x = value.clamp(0.0, 1.0),
             2 => self.prefs.camera.focus_y = value.clamp(0.0, 1.0),
+            3 => {
+                self.prefs.camera.move_seconds =
+                    value.clamp(crate::camera::MIN_MOVE_SECONDS, crate::camera::MAX_MOVE_SECONDS)
+            }
             _ => return,
         }
         self.prefs.save(&self.host.dirs);

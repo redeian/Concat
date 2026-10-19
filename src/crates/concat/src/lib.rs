@@ -893,6 +893,9 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
     ));
     // The Adjustments page: a layer that grades everything beneath it,
     // and a LUT onto the selected clip or, with none, as a layer.
+    editor.on_library_add_camera(on_window!(|state, label: SharedString| {
+        state.place_camera_layer(&label);
+    }));
     editor.on_library_add_adjustment(on_window!(|state, label: SharedString| {
         state.place_adjustment_layer(label.as_str());
     }));

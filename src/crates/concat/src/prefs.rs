@@ -75,6 +75,8 @@ pub struct CameraPrefs {
     /// The point to hold still, in frame fractions from the top left.
     pub focus_x: f64,
     pub focus_y: f64,
+    /// How long a reframe takes, in seconds.
+    pub move_seconds: f64,
 }
 
 impl Default for CameraPrefs {
@@ -83,6 +85,7 @@ impl Default for CameraPrefs {
             zoom: 1.5,
             focus_x: 0.5,
             focus_y: 0.5,
+            move_seconds: crate::camera::MOVE_SECONDS,
         }
     }
 }

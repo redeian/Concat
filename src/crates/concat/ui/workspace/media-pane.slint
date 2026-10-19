@@ -1321,6 +1321,10 @@ export component ShelfGrid inherits Rectangle {
 component AdjustmentShelf inherits Rectangle {
     in property <image> art;
     callback placed(label: string);
+    /// CapyCut: the camera card. A camera is a layer too, so it sits beside
+    /// the adjustment layer rather than in a page of its own - but it opens on
+    /// the Animation tab, because that is where a camera is driven from.
+    callback camera-placed(label: string);
 
     /// What the lane calls the layer, in the interface's language.
     property <string> name: I18n.t("mediaPane.adjustment");
@@ -1348,6 +1352,26 @@ component AdjustmentShelf inherits Rectangle {
         payload: "filter:concat.adjust:\{root.name}";
         auditions: false;
         applied => { root.placed(root.name); }
+    }
+
+    // CapyCut: the camera. The same layer at its defaults, which changes
+    // nothing until it is keyed - a treatment with a transform and no look of
+    // its own.
+    CatalogueCard {
+        x: root.card-w + root.gap;
+        y: 0;
+        width: root.card-w;
+        height: parent.height;
+        item: {
+            id: "concat.camera",
+            label: I18n.t("mediaPane.cameraLayer"),
+            enabled: true,
+            art: root.art,
+            glyph: Glyph.frame,
+        };
+        payload: "filter:concat.adjust:\{root.name}";
+        auditions: false;
+        applied => { root.camera-placed(root.name); }
     }
 }
 
@@ -1780,6 +1804,9 @@ export component MediaPane inherits Rectangle {
     /// Adjustments page: lay an adjustment layer at the playhead, called
     /// `label`.
     callback add-adjustment(label: string);
+    /// CapyCut: the camera card - a layer laid at the playhead, opened on the
+    /// Animation tab.
+    callback library-add-camera(label: string);
     /// Adjustments page: a LUT onto the selected clip, or with nothing
     /// selected, laid as a layer at the playhead.
     callback apply-lut(lut-id: string, label: string);
@@ -2777,6 +2804,10 @@ export component MediaPane inherits Rectangle {
                     AdjustmentShelf {
                         art: root.adjustment-art;
                         placed(label) => { root.add-adjustment(label); }
+                        // The camera's own card; `null` marks it as one, so the
+                        // layer is laid at the playhead exactly like an
+                        // adjustment and only the inspector's landing changes.
+                        camera-placed(label) => { root.library-add-camera(label); }
                     }
                 }
 
