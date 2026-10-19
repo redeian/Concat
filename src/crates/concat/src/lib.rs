@@ -34,6 +34,8 @@ mod ui {
 mod batch_volume;
 // CapyCut: one-click animation presets for titles, shapes and stickers.
 mod animation;
+// CapyCut: punching the camera in and out over a layer.
+mod camera;
 mod brand;
 mod chips;
 mod dock;
@@ -1479,6 +1481,16 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
     }));
     editor.on_anim_seconds(on_window!(|state, seconds: f32| {
         state.set_animation_seconds(f64::from(seconds));
+    }));
+    // CapyCut: the camera on a layer - punch in, punch out, put it back.
+    editor.on_camera_punch(on_window!(|state, side: i32| {
+        state.punch_camera(side);
+    }));
+    editor.on_camera_reset(on_window!(|state| {
+        state.reset_camera();
+    }));
+    editor.on_camera_param(on_window!(|state, field: i32, value: f32| {
+        state.set_camera(field, f64::from(value));
     }));
     editor.on_cutout_tool(on_window!(|state, index: i32| {
         state.cutout_tool(index);

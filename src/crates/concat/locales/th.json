@@ -933,5 +933,14 @@
   "voices.styles": "สไตล์",
   "voices.stylesHint": "สไตล์คือเสียงพูดที่ใส่เอฟเฟกต์ เลือกหนึ่งสไตล์เพื่อเขียนด้วยเสียงนั้น เอฟเฟกต์จะอยู่บนคลิปเสียงพูด ซึ่งคุณเปลี่ยนได้",
   "voices.voices": "เสียงพูด",
-  "voices.yours": "เสียงพูดของคุณ"
+  "voices.yours": "เสียงพูดของคุณ",
+  "camera.title": "กล้อง",
+  "camera.in": "ซูมเข้า",
+  "camera.out": "ซูมออก",
+  "camera.reset": "รีเซ็ต",
+  "camera.zoom": "ระดับซูม",
+  "camera.focusX": "จุดโฟกัส X",
+  "camera.focusY": "จุดโฟกัส Y",
+  "camera.selectLayer": "เลือกเลเยอร์ก่อน แล้วค่อยซูม",
+  "camera.needsLayer": "ซูมได้เฉพาะเลเยอร์ปรับแต่ง วางเลเยอร์ก่อน"
 }

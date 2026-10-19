@@ -10238,6 +10238,10 @@ impl Studio {
             silence_gap: self.prefs.silence.gap as f32,
             // CapyCut: how long an animation preset runs, from the same prefs.
             animation_seconds: self.prefs.animation.seconds as f32,
+            // CapyCut: where the camera is pointed, and how far in.
+            camera_zoom: self.prefs.camera.zoom as f32,
+            camera_focus_x: self.prefs.camera.focus_x as f32,
+            camera_focus_y: self.prefs.camera.focus_y as f32,
             transition_id: clip
                 .transition_in
                 .as_ref()
@@ -11965,6 +11969,68 @@ impl Studio {
             let (from, _) = side.window(span);
             self.playhead = (clip.start + from * clip.duration) as f32;
         }
+    }
+
+    /// CapyCut: punches the camera in, or out, at the playhead.
+    ///
+    /// The camera is a layer - one clip spanning however many segments it
+    /// covers - which is what lets a move run straight through a cut instead of
+    /// restarting at one. Punching is three keys: the value it starts on, the
+    /// value it lands on a third of a second later, and the same value again at
+    /// the end of the clip so the camera stays where it was put.
+    pub fn punch_camera(&mut self, side: i32) {
+        let Some(side) = crate::camera::Side::from_index(side) else {
+            return;
+        };
+        let Some(clip_id) = self.sole_selection() else {
+            self.notify(&t("camera.selectLayer"), true);
+            return;
+        };
+        let Some(clip) = self.clip(&clip_id).cloned() else {
+            return;
+        };
+        if clip.kind != model::ClipKind::Layer {
+            self.notify(&t("camera.needsLayer"), true);
+            return;
+        }
+        let playhead = place_in(&clip, self.playhead);
+        let punch = crate::camera::Punch {
+            focus: (self.prefs.camera.focus_x, self.prefs.camera.focus_y),
+            scale: self.prefs.camera.zoom,
+        };
+        self.flush_commit();
+        self.apply(crate::camera::commands(&clip, punch, side, playhead));
+    }
+
+    /// CapyCut: puts the camera back where it started.
+    pub fn reset_camera(&mut self) {
+        let Some(clip_id) = self.sole_selection() else {
+            self.notify(&t("camera.selectLayer"), true);
+            return;
+        };
+        let Some(clip) = self.clip(&clip_id).cloned() else {
+            return;
+        };
+        self.flush_commit();
+        self.apply(crate::camera::reset(&clip));
+    }
+
+    /// CapyCut: the camera's zoom and its focus point, remembered.
+    ///
+    /// Field 0 is how far in, 1 and 2 are where in the frame, from the top
+    /// left - the same fractions `camera::focus_offsets` works in, so what the
+    /// panel says and what the compositor holds still are the same number.
+    pub fn set_camera(&mut self, field: i32, value: f64) {
+        if !value.is_finite() {
+            return;
+        }
+        match field {
+            0 => self.prefs.camera.zoom = value.clamp(1.0, 4.0),
+            1 => self.prefs.camera.focus_x = value.clamp(0.0, 1.0),
+            2 => self.prefs.camera.focus_y = value.clamp(0.0, 1.0),
+            _ => return,
+        }
+        self.prefs.save(&self.host.dirs);
     }
 
     /// Sets how long a one-click animation runs, and remembers it.

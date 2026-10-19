@@ -296,6 +296,10 @@ export global Editor {
     /// CapyCut: one-click animation, from the inspector's Animation section.
     callback anim(preset: int, side: int);
     callback anim-seconds(seconds: float);
+    /// CapyCut: the camera on a layer.
+    callback camera-punch(side: int);
+    callback camera-reset();
+    callback camera-param(field: int, value: float);
     callback cutout-tool(index: int);
     callback cutout-size(size: float);
     callback cutout-painting(on: bool);

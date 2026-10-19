@@ -198,6 +198,10 @@ export component ConfigPane inherits Rectangle {
     /// CapyCut: one-click animation, forwarded from the Video and Text panels.
     callback anim(preset: int, side: int);
     callback anim-seconds(seconds: float);
+    /// CapyCut: the camera's punch buttons and its two numbers.
+    callback camera-punch(side: int);
+    callback camera-reset();
+    callback camera-param(field: int, value: float);
     callback clip-commit();
     /// The Text tab's font picker and its import button; see Editor.
     in property <[string]> font-families;
@@ -733,8 +737,15 @@ export component ConfigPane inherits Rectangle {
                 if root.showing == "Animation": VerticalLayout {
                     AnimationSection {
                         seconds: root.selected.animation-seconds;
+                        camera: root.is-layer;
+                        camera-zoom: root.selected.camera-zoom;
+                        camera-focus-x: root.selected.camera-focus-x;
+                        camera-focus-y: root.selected.camera-focus-y;
                         run(preset, side) => { root.anim(preset, side); }
                         seconds-changed(seconds) => { root.anim-seconds(seconds); }
+                        camera-punch(side) => { root.camera-punch(side); }
+                        camera-reset() => { root.camera-reset(); }
+                        camera-param(field, value) => { root.camera-param(field, value); }
                     }
                 }
 

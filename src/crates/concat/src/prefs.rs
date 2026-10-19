@@ -64,6 +64,29 @@ impl Default for AnimPrefs {
     }
 }
 
+/// CapyCut: where the camera is pointed and how far in, last set in the
+/// Animation tab. Zoom is a number rather than a preset because a tutorial's
+/// framing is worked out once and then reused for the rest of the recording.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct CameraPrefs {
+    /// How far in, `1.0..=4.0`.
+    pub zoom: f64,
+    /// The point to hold still, in frame fractions from the top left.
+    pub focus_x: f64,
+    pub focus_y: f64,
+}
+
+impl Default for CameraPrefs {
+    fn default() -> Self {
+        CameraPrefs {
+            zoom: 1.5,
+            focus_x: 0.5,
+            focus_y: 0.5,
+        }
+    }
+}
+
 /// Remembered preferences.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -71,6 +94,8 @@ pub struct Preferences {
     // CapyCut: how long an animation preset runs. One number for every preset,
     // because an edit has one tempo.
     pub animation: AnimPrefs,
+    // CapyCut: where the camera punches in, and how far.
+    pub camera: CameraPrefs,
     // CapyCut: what *Remove silence* cuts with, as last set in the Audio tab.
     // Its own struct so the four values travel together in the prefs file.
     pub silence: SilencePrefs,

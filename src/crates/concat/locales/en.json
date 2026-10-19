@@ -933,5 +933,14 @@
   "voices.styles": "Styles",
   "voices.stylesHint": "A style is a voice with effects on it. Pick one to write in it: the effects go on the speech clip, where you can change them.",
   "voices.voices": "Voices",
-  "voices.yours": "Your voices"
+  "voices.yours": "Your voices",
+  "camera.title": "Camera",
+  "camera.in": "Punch in",
+  "camera.out": "Punch out",
+  "camera.reset": "Reset",
+  "camera.zoom": "Zoom",
+  "camera.focusX": "Focus X",
+  "camera.focusY": "Focus Y",
+  "camera.selectLayer": "Select a layer first",
+  "camera.needsLayer": "A camera is an adjustment layer - lay one down first"
 }

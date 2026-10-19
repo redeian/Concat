@@ -29,6 +29,16 @@ export component AnimationSection inherits VerticalLayout {
     in property <float> seconds: 0.35;
     callback seconds-changed(seconds: float);
 
+    /// CapyCut: the camera group. Only a layer can be a camera, so the caller
+    /// says whether the selection can be one and the group appears only then.
+    in property <bool> camera: false;
+    in property <float> camera-zoom: 1.5;
+    in property <float> camera-focus-x: 0.5;
+    in property <float> camera-focus-y: 0.5;
+    callback camera-punch(side: int);
+    callback camera-reset();
+    callback camera-param(field: int, value: float);
+
     /// How many presets come before the looping ones; see `Preset::DURING`.
     property <int> loops-from: 9;
 
@@ -106,6 +116,70 @@ export component AnimationSection inherits VerticalLayout {
             label: name;
             block: true;
             clicked => { root.run(index, 2); }
+        }
+    }
+
+    // CapyCut: the camera. A zoom is a layer whose transform moves, so these
+    // controls write keys on scale and offsets - the same keys the curve editor
+    // shows - with the hold, move, hold shape a tutorial needs.
+    if root.camera: VerticalLayout {
+        spacing: 6px;
+
+        Text {
+            text: I18n.t("camera.title");
+            color: Theme.fg-muted;
+            font-size: Theme.fs-sm;
+            height: 16px;
+        }
+
+        HorizontalLayout {
+            spacing: 6px;
+            Button {
+                label: I18n.t("camera.in");
+                block: true;
+                clicked => { root.camera-punch(0); }
+            }
+            Button {
+                label: I18n.t("camera.out");
+                block: true;
+                clicked => { root.camera-punch(1); }
+            }
+            Button {
+                label: I18n.t("camera.reset");
+                block: true;
+                clicked => { root.camera-reset(); }
+            }
+        }
+
+        Param {
+            label: I18n.t("camera.zoom");
+            value: root.camera-zoom;
+            minimum: 1;
+            maximum: 4;
+            step: 0.1;
+            default-value: 1.5;
+            fmt: ParamFormat.rate;
+            changed(v) => { root.camera-param(0, v); }
+        }
+        Param {
+            label: I18n.t("camera.focusX");
+            value: root.camera-focus-x;
+            minimum: 0;
+            maximum: 1;
+            step: 0.01;
+            default-value: 0.5;
+            fmt: ParamFormat.fraction;
+            changed(v) => { root.camera-param(1, v); }
+        }
+        Param {
+            label: I18n.t("camera.focusY");
+            value: root.camera-focus-y;
+            minimum: 0;
+            maximum: 1;
+            step: 0.01;
+            default-value: 0.5;
+            fmt: ParamFormat.fraction;
+            changed(v) => { root.camera-param(2, v); }
         }
     }
 

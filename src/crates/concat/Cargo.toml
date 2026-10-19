@@ -140,6 +140,9 @@ concat-core.workspace = true
 concat-media.workspace = true
 concat-project.workspace = true
 concat-export.workspace = true
+# CapyCut: the camera's own arithmetic, so a punch and the compositor that
+# holds the focus point still cannot drift apart.
+concat-render.workspace = true
 concat-host = { workspace = true, features = ["gpu"] }
 concat-speech = { workspace = true, features = ["chatterbox"] }
 # The Settings sheet's Automation page: the Concat API on a socket while the

@@ -275,6 +275,9 @@ export component Seat inherits Rectangle {
             silence-cut() => { Editor.silence-cut(); }
             anim(preset, side) => { Editor.anim(preset, side); }
             anim-seconds(seconds) => { Editor.anim-seconds(seconds); }
+            camera-punch(side) => { Editor.camera-punch(side); }
+            camera-reset() => { Editor.camera-reset(); }
+            camera-param(field, value) => { Editor.camera-param(field, value); }
             cutout-tool(index) => { Editor.cutout-tool(index); }
             cutout-size(size) => { Editor.cutout-size(size); }
             cutout-painting(on) => { Editor.cutout-painting(on); }
