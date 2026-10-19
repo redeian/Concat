@@ -5,9 +5,15 @@
 // CapyCut: one-click animation for the things that are not footage - titles,
 // figures, and the stickers built from either.
 //
-// A preset is a short list of keyframes on the clip's own scale, opacity and
-// offset, applied as one batch: see animation.rs. Nothing here animates; the
-// panel only sends which preset, and which end of the clip it belongs to.
+// A preset is a short list of keyframes on the clip's own scale, opacity,
+// offset and rotation, applied as one batch: see animation.rs. Nothing here
+// animates; the panel only sends which preset, and which part of the clip it
+// belongs to.
+//
+// Three groups, because that is what an edit is: how it arrives, what it does
+// while it is there, and how it leaves. The arrivals and the departures are the
+// same presets read in opposite directions, so the same nine names appear twice
+// and the side is all that tells them apart.
 
 import { I18n } from "../i18n.slint";
 import { Theme } from "../theme/theme.slint";
@@ -15,20 +21,37 @@ import { Button } from "../primitives/modal.slint";
 import { Param, ParamFormat } from "./controls.slint";
 
 export component AnimationSection inherits VerticalLayout {
-    /// `run(0, 0)` is Elastic pop on the enter. Preset: 0 pop, 1 fade,
-    /// 2 slide. Side: 0 enter, 1 exit.
+    /// Which preset, and which part of the clip: 0 enter, 1 during, 2 exit.
+    /// The preset index is global - the looping group starts at 9 - so either
+    /// grid can name its preset without knowing which group it is in.
     callback run(preset: int, side: int);
-    /// The length every preset runs for, in seconds.
+    /// The length an arrival or a departure runs for, in seconds.
     in property <float> seconds: 0.35;
     callback seconds-changed(seconds: float);
 
-    property <[string]> presets: [
+    /// How many presets come before the looping ones; see `Preset::DURING`.
+    property <int> loops-from: 9;
+
+    property <[string]> arrivals: [
         I18n.t("anim.elasticPop"),
         I18n.t("anim.fade"),
-        I18n.t("anim.slide"),
+        I18n.t("anim.slideUp"),
+        I18n.t("anim.slideDown"),
+        I18n.t("anim.slideLeft"),
+        I18n.t("anim.slideRight"),
+        I18n.t("anim.zoom"),
+        I18n.t("anim.spin"),
+        I18n.t("anim.drop"),
     ];
 
-    spacing: 6px;
+    property <[string]> loops: [
+        I18n.t("anim.pulse"),
+        I18n.t("anim.float"),
+        I18n.t("anim.shake"),
+        I18n.t("anim.breathe"),
+    ];
+
+    spacing: 8px;
 
     Text {
         text: I18n.t("anim.enter");
@@ -37,12 +60,34 @@ export component AnimationSection inherits VerticalLayout {
         height: 16px;
     }
 
-    HorizontalLayout {
+    // A grid rather than a row: nine presets in one line would be a toolbar of
+    // unreadable slivers, and this list is going to keep growing.
+    GridLayout {
         spacing: 6px;
-        for name[index] in root.presets: Button {
+        for name[index] in root.arrivals: Button {
+            row: Math.floor(index / 3);
+            col: Math.mod(index, 3);
             label: name;
             block: true;
             clicked => { root.run(index, 0); }
+        }
+    }
+
+    Text {
+        text: I18n.t("anim.during");
+        color: Theme.fg-muted;
+        font-size: Theme.fs-sm;
+        height: 16px;
+    }
+
+    GridLayout {
+        spacing: 6px;
+        for name[index] in root.loops: Button {
+            row: Math.floor(index / 2);
+            col: Math.mod(index, 2);
+            label: name;
+            block: true;
+            clicked => { root.run(index + root.loops-from, 1); }
         }
     }
 
@@ -53,18 +98,21 @@ export component AnimationSection inherits VerticalLayout {
         height: 16px;
     }
 
-    HorizontalLayout {
+    GridLayout {
         spacing: 6px;
-        for name[index] in root.presets: Button {
+        for name[index] in root.arrivals: Button {
+            row: Math.floor(index / 3);
+            col: Math.mod(index, 3);
             label: name;
             block: true;
-            clicked => { root.run(index, 1); }
+            clicked => { root.run(index, 2); }
         }
     }
 
-    // How long the preset runs. One number for all of them: an edit has one
-    // tempo, and a title that pops slower than its neighbour reads as a
-    // mistake rather than a choice.
+    // How long an arrival or a departure runs. One number for all of them: an
+    // edit has one tempo, and a title that pops slower than its neighbour reads
+    // as a mistake rather than a choice. The looping presets ignore it - they
+    // are the length of the clip by definition.
     Param {
         label: I18n.t("anim.duration");
         value: root.seconds;

@@ -11206,9 +11206,9 @@ impl Studio {
         for (preset, name) in [
             (0, "anim.elasticPop"),
             (1, "anim.fade"),
-            (2, "anim.slide"),
+            (2, "anim.slideUp"),
         ] {
-            for (side, suffix) in [(0, "anim.in"), (1, "anim.out")] {
+            for (side, suffix) in [(0, "anim.in"), (2, "anim.out")] {
                 rows.push(action(
                     &format!("animate:{preset}:{side}"),
                     format!("{} · {}", t(name), t(suffix)),
@@ -11957,6 +11957,14 @@ impl Studio {
             side,
             self.prefs.animation.seconds,
         ));
+        // Land the playhead at the start of the animation, so a click shows
+        // something instead of leaving the monitor on whatever frame it was
+        // parked on. The user presses play; nothing scrubs on its own.
+        if clip.duration > 0.0 {
+            let span = self.prefs.animation.seconds / clip.duration;
+            let (from, _) = side.window(span);
+            self.playhead = (clip.start + from * clip.duration) as f32;
+        }
     }
 
     /// Sets how long a one-click animation runs, and remembers it.
