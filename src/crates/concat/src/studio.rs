@@ -11266,30 +11266,6 @@ impl Studio {
             rows.push(rule());
         }
         let audible = clip.kind != model::ClipKind::Image;
-        // CapyCut: one-click animation. Six rows rather than a submenu -
-        // the menu has no nesting - two per preset, because an edit is
-        // described by how something arrives and how it leaves.
-        rows.push(MenuItemData {
-            kind: MenuRow::Label,
-            label: t("anim.title").into(),
-            ..Default::default()
-        });
-        for (preset, name) in [
-            (0, "anim.elasticPop"),
-            (1, "anim.fade"),
-            (2, "anim.slideUp"),
-        ] {
-            for (side, suffix) in [(0, "anim.in"), (2, "anim.out")] {
-                rows.push(action(
-                    &format!("animate:{preset}:{side}"),
-                    format!("{} · {}", t(name), t(suffix)),
-                    Glyph::None,
-                    "",
-                    !locked,
-                ));
-            }
-        }
-        rows.push(rule());
         rows.push(check(
             "mute",
             &t("studio.mute"),
@@ -12365,16 +12341,6 @@ impl Studio {
                 self.inspector_jump = (self.inspector_jump.0 + 1, "Video", "Enhance");
             }
             "export-audio" => self.export_clip_audio(id),
-            // CapyCut: "animate:<preset>:<side>" from the clip menu. The clip
-            // becomes the selection, since that is what a preset writes to.
-            action if action.starts_with("animate:") => {
-                let mut parts = action.split(':').skip(1).filter_map(|part| part.parse::<i32>().ok());
-                if let (Some(preset), Some(side)) = (parts.next(), parts.next()) {
-                    self.selection = vec![id.to_owned()];
-                    self.transition_selected = None;
-                    self.apply_animation(preset, side);
-                }
-            }
             // CapyCut: the silences in this clip's sound, cut out as one undo
             // step. The analysis is silence_cut's.
             "remove-silence" => self.remove_silence(id),
