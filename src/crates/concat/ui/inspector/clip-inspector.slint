@@ -403,6 +403,20 @@ export component PresetStack inherits VerticalLayout {
                                 fmt: p.fmt;
                                 unit: p.unit;
                                 enabled: item.on;
+                                // A parameter its package says may be
+                                // animated gets the cluster; the rest are
+                                // constants, and a control that cannot move
+                                // should not pretend it can.
+                                keyable: p.keyable;
+                                key-entry: p.entry;
+                                key-name: p.key;
+                                key-state: {
+                                    field: ClipField.scale,
+                                    keyed: p.keyed,
+                                    here: p.here,
+                                    prev: p.prev,
+                                    next: p.next,
+                                };
                                 changed(v) => {
                                     root.set-param(index, p.key, v);
                                     root.commit();

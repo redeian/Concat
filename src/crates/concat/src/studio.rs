@@ -1815,7 +1815,7 @@ fn chain_colours(chain: &[AppliedFilter]) -> Vec<ColourKnobData> {
 /// knob its package declares, holding the document's value or the default.
 /// A link no package answers to keeps its row - so it can be removed - and
 /// gets no knobs.
-fn chain_rows(chain: &[AppliedFilter]) -> (Vec<AppliedEntryData>, Vec<AppliedParamData>) {
+fn chain_rows(chain: &[AppliedFilter], at: Option<f64>) -> (Vec<AppliedEntryData>, Vec<AppliedParamData>) {
     let catalogue = Catalogue::builtin();
     let mut rows = Vec::new();
     let mut knobs = Vec::new();
@@ -1877,6 +1877,20 @@ fn chain_rows(chain: &[AppliedFilter]) -> (Vec<AppliedEntryData>, Vec<AppliedPar
             } else {
                 (param.max - param.min) / 200.0
             };
+            // A knob its package declares `animate` for rides keys like a
+            // clip's own field does; the rest are constants.
+            let keyed = param.animate && at.is_some() && entry.is_keyed(&param.key);
+            let (here, prev, next) = match at {
+                Some(at) if keyed => {
+                    let (prev, next) = entry.keys_around(&param.key, at);
+                    (
+                        entry.key_at(&param.key, at).is_some(),
+                        prev.is_some(),
+                        next.is_some(),
+                    )
+                }
+                _ => (false, false, false),
+            };
             knobs.push(AppliedParamData {
                 entry: index as i32,
                 key: param.key.as_str().into(),
@@ -1887,17 +1901,21 @@ fn chain_rows(chain: &[AppliedFilter]) -> (Vec<AppliedEntryData>, Vec<AppliedPar
                 max: param.max as f32,
                 step: step as f32,
                 default_value: param.default as f32,
-                value: entry
-                    .params
-                    .get(&param.key)
-                    .copied()
-                    .unwrap_or(param.default) as f32,
+                value: match (at, keyed) {
+                    // What the key at the playhead holds, when one rides there.
+                    (Some(at), true) => entry.value_at(&param.key, at, param.default) as f32,
+                    _ => entry
+                        .params
+                        .get(&param.key)
+                        .copied()
+                        .unwrap_or(param.default) as f32,
+                },
                 fmt: format_of(&param.unit),
-                keyable: false,
-                keyed: false,
-                here: false,
-                prev: false,
-                next: false,
+                keyable: param.animate,
+                keyed,
+                here,
+                prev,
+                next,
             });
         }
     }
@@ -4567,16 +4585,26 @@ impl Studio {
             return;
         };
         self.begin_echo();
+        let playhead = self.playhead;
         let Some(clip) = self.echo_clip_mut(&id) else {
             return;
         };
+        let at = place_in(clip, playhead);
         let chain = if audio {
             &mut clip.filters
         } else {
             &mut clip.video_effects
         };
         if let Some(entry) = usize::try_from(index).ok().and_then(|i| chain.get_mut(i)) {
-            entry.params.insert(key.to_owned(), f64::from(value));
+            // A knob that rides is edited where the playhead is: the value
+            // becomes the key there rather than the constant underneath it,
+            // which nothing on screen would show.
+            if entry.is_keyed(key) {
+                let ease = ease_before(entry.keys_on(key), at);
+                entry.set_key(key, at, f64::from(value), ease);
+            } else {
+                entry.params.insert(key.to_owned(), f64::from(value));
+            }
         }
     }
 
@@ -4703,6 +4731,76 @@ impl Studio {
     /// at that instant, so pressing the diamond never moves the picture. A
     /// wheel - named by itself or by one of its own keys - is one knob: its
     /// puck and master are keyed, and unkeyed, together.
+    /// Put a key on an effect's knob at the playhead, or take the one there
+    /// off - the diamond beside a chain's slider, across the selection, as one
+    /// step. The value is the one the knob shows, so a key is put on where the
+    /// person can see it.
+    pub fn toggle_effect_key(&mut self, entry: i32, key: &str) {
+        let Ok(entry) = usize::try_from(entry) else {
+            return;
+        };
+        let playhead = self.playhead;
+        let mut commands: Vec<Command> = Vec::new();
+        for clip_id in self.edit_targets() {
+            let Some(clip) = self.clip(&clip_id).cloned() else {
+                continue;
+            };
+            let Some(link) = clip.video_effects.get(entry) else {
+                continue;
+            };
+            if !link.is_keyed(key) && !link.params.contains_key(key) {
+                continue;
+            }
+            let at = place_in(&clip, playhead);
+            match link.key_at(key, at) {
+                Some(index) => {
+                    let at = link.keys_on(key)[index].at;
+                    commands.push(Command::ClearEffectKey {
+                        clip_id,
+                        entry,
+                        key: key.to_owned(),
+                        at,
+                    });
+                }
+                None => {
+                    let value = link.value_at(key, at, 1.0);
+                    let ease = ease_before(link.keys_on(key), at);
+                    commands.push(Command::SetEffectKey {
+                        clip_id,
+                        entry,
+                        key: key.to_owned(),
+                        at,
+                        value,
+                        ease,
+                    });
+                }
+            }
+        }
+        self.apply_all(commands);
+    }
+
+    /// The playhead to an effect knob's previous (-1) or next (+1) key.
+    pub fn step_effect_key(&mut self, entry: i32, key: &str, delta: i32) {
+        let Ok(entry) = usize::try_from(entry) else {
+            return;
+        };
+        let Some(clip_id) = self.selection.first().cloned() else {
+            return;
+        };
+        let Some(clip) = self.clip(&clip_id).cloned() else {
+            return;
+        };
+        let Some(link) = clip.video_effects.get(entry) else {
+            return;
+        };
+        let at = place_in(&clip, self.playhead);
+        let (prev, next) = link.keys_around(key, at);
+        let target = if delta < 0 { prev } else { next };
+        if let Some(target) = target {
+            self.seek((clip.start + target * clip.duration) as f32);
+        }
+    }
+
     pub fn toggle_adjust_key(&mut self, key: &str) {
         let Some((clip, at, entry)) = self.adjust_point() else {
             return;
@@ -9387,8 +9485,9 @@ impl Studio {
         let (visual, visual_params, sound, sound_params) =
             match self.sole_selection().and_then(|id| self.clip(&id)) {
                 Some(clip) => {
-                    let (visual, visual_params) = chain_rows(&clip.video_effects);
-                    let (sound, sound_params) = chain_rows(&clip.filters);
+                    let at = place_in(clip, self.playhead);
+                    let (visual, visual_params) = chain_rows(&clip.video_effects, Some(at));
+                    let (sound, sound_params) = chain_rows(&clip.filters, None);
                     (visual, visual_params, sound, sound_params)
                 }
                 None => (Vec::new(), Vec::new(), Vec::new(), Vec::new()),
@@ -12994,7 +13093,7 @@ mod tests {
     fn a_colour_knob_is_a_swatch() {
         use concat_project::model::AppliedFilter;
         let mut link = AppliedFilter::new("concat.chroma-key");
-        let (_, knobs) = chain_rows(std::slice::from_ref(&link));
+        let (_, knobs) = chain_rows(std::slice::from_ref(&link), None);
         assert!(knobs.iter().all(|knob| knob.key != "color"), "no slider");
         assert!(knobs.iter().any(|knob| knob.key == "similarity"));
         let colours = chain_colours(std::slice::from_ref(&link));

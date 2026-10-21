@@ -285,16 +285,21 @@ export component KeyCluster inherits HorizontalLayout {
     /// name instead of `field`, and is handed its state rather than looking
     /// it up. Empty for a field.
     in property <string> name;
+    /// An effect in a chain, by its link's index: -1 for a clip's own field
+    /// and for a named knob, which are addressed without one.
+    in property <int> entry: -1;
     in property <ClipKeyData> state: Keyframes.row(root.field);
 
     property <bool> live: Keyframes.available;
 
     function toggle() {
-        if (root.name == "") { Keyframes.toggle(root.field); }
+        if (root.entry >= 0) { Keyframes.toggle-effect(root.entry, root.name); }
+        else if (root.name == "") { Keyframes.toggle(root.field); }
         else { Keyframes.toggle-param(root.name); }
     }
     function step(delta: int) {
-        if (root.name == "") { Keyframes.step(root.field, delta); }
+        if (root.entry >= 0) { Keyframes.step-effect(root.entry, root.name, delta); }
+        else if (root.name == "") { Keyframes.step(root.field, delta); }
         else { Keyframes.step-param(root.name, delta); }
     }
 
@@ -359,6 +364,9 @@ export component Param inherits VerticalLayout {
     in property <ClipField> field;
     /// See KeyCluster: a row keyed by name is handed its key state.
     in property <string> key-name;
+    /// The chain link this knob belongs to, when it is an effect's; -1
+    /// otherwise. See KeyCluster.
+    in property <int> key-entry: -1;
     in property <ClipKeyData> key-state: Keyframes.row(root.field);
 
     callback changed(value: float);
@@ -429,6 +437,7 @@ export component Param inherits VerticalLayout {
             KeyCluster {
                 field: root.field;
                 name: root.key-name;
+                entry: root.key-entry;
                 state: root.key-state;
             }
         }

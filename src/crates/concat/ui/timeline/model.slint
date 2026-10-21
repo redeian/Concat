@@ -239,6 +239,12 @@ export global Keyframes {
     callback step-param(key: string, delta: int);
     callback clear-param(key: string);
 
+    /// And for a knob on an effect in a clip's chain: named by the link's
+    /// index and the package's manifest key, since two links can declare the
+    /// same name. See AppliedParamData.
+    callback toggle-effect(entry: int, key: string);
+    callback step-effect(entry: int, key: string, delta: int);
+
     /// A row for a field with no keys and nowhere to step.
     pure public function blank(field: ClipField) -> ClipKeyData {
         return { field: field, keyed: false, here: false, prev: false, next: false };

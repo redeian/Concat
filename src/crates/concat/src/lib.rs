@@ -1190,6 +1190,13 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
         keys.on_clear_param(on_lanes!(|state, key: SharedString| {
             state.clear_adjust_keys(key.as_str());
         }));
+        // And for an effect's own knob, addressed by the link and the key.
+        keys.on_toggle_effect(on_lanes!(|state, entry: i32, key: SharedString| {
+            state.toggle_effect_key(entry, key.as_str());
+        }));
+        keys.on_step_effect(on_lanes!(|state, entry: i32, key: SharedString, delta: i32| {
+            state.step_effect_key(entry, key.as_str(), delta);
+        }));
     }
     // The background behind the main picture, and Fit and Fill: a global
     // of their own, for the Details panel, the Video panel and the phone.
