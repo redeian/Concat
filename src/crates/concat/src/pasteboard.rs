@@ -98,20 +98,27 @@ fn picture() -> Option<Picked> {
         let bytes = held.to_vec();
         (!bytes.is_empty()).then_some(bytes)
     };
-    if let Some(bytes) = bytes_of("public.png") {
-        return Some(Picked::Image(bytes, "png"));
+    // Every picture type is decoded and re-encoded as PNG, rather than one
+    // being trusted to be what it says: a pasteboard can carry a `public.png`
+    // that is not a PNG - a placeholder, a truncated copy - and writing it out
+    // untouched puts a file in the bin that imports and then draws nothing.
+    // What lands in `media/` is a picture this app made itself.
+    for kind in ["public.png", "public.tiff", "public.jpeg", "public.gif", "public.bmp"] {
+        if let Some(bytes) = bytes_of(kind)
+            && let Some(png) = as_png(&bytes)
+        {
+            return Some(Picked::Image(png, "png"));
+        }
     }
-    // A screenshot is TIFF, and only TIFF: it is decoded and re-encoded as PNG
-    // so what lands in `media/` is a picture every reader here understands.
-    let bytes = bytes_of("public.tiff")?;
-    tiff_to_png(&bytes).map(|png| Picked::Image(png, "png"))
+    None
 }
 
-/// TIFF bytes as PNG bytes: what a screenshot is, and what every reader here
-/// understands. None when the picture cannot be read at all.
+/// Some picture bytes as PNG bytes, whatever they arrived as: a screenshot's
+/// TIFF, a PNG, a JPEG. None when the bytes are not a picture at all, which is
+/// the answer that keeps a broken file out of the bin.
 #[cfg(target_os = "macos")]
-fn tiff_to_png(bytes: &[u8]) -> Option<Vec<u8>> {
-    let picture = image::load_from_memory_with_format(bytes, image::ImageFormat::Tiff).ok()?;
+fn as_png(bytes: &[u8]) -> Option<Vec<u8>> {
+    let picture = image::load_from_memory(bytes).ok()?;
     let mut png: Vec<u8> = Vec::new();
     picture
         .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
@@ -132,7 +139,7 @@ mod picture_tests {
         image::DynamicImage::ImageRgba8(picture)
             .write_to(&mut std::io::Cursor::new(&mut tiff), image::ImageFormat::Tiff)
             .expect("a tiff to convert");
-        let png = tiff_to_png(&tiff).expect("converted");
+        let png = as_png(&tiff).expect("converted");
         assert_eq!(&png[..8], b"\x89PNG\r\n\x1a\n", "the bytes are a PNG");
         let back = image::load_from_memory_with_format(&png, image::ImageFormat::Png)
             .expect("the png decodes");
