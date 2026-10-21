@@ -2777,6 +2777,13 @@ impl Studio {
     /// The bookkeeping every change to the edit needs: the caches that
     /// follow the document, the autosave, the monitor and the mix.
     fn after_change(&mut self) {
+        self.note_change();
+    }
+
+    /// [`Studio::after_change`] for a caller outside this module: live mode
+    /// applies a command to the session the window draws, and everything
+    /// that follows a change here has to follow that one too.
+    pub fn note_change(&mut self) {
         self.dirty = true;
         self.revision += 1;
         self.assign_media_rows();

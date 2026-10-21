@@ -141,6 +141,26 @@ impl std::fmt::Display for Refusal {
     }
 }
 
+/// A window this API is embedded in, when the switch that lets scripts edit
+/// the project on screen is on ("live mode").
+///
+/// With no bridge an API never touches a folder the window holds; with one,
+/// a request naming that folder is handed to the window's own document,
+/// on the window's event loop, and answered from there: the same command
+/// the inspector sends, the same undo history, the picture redrawn as the
+/// edit lands. The register of open projects ([`OpenProjects`]) still
+/// decides which calls those are, so a folder the window has closed goes
+/// back to being refused or opened here as it was.
+///
+/// A call blocks the caller for as long as the event loop takes to run it,
+/// which is the wait it would have had for any other method.
+pub trait WindowBridge: Send + Sync {
+    /// Runs `request` against the window's document. `Err` where the window
+    /// is gone or will not answer; the caller's transport reports it as it
+    /// would any other refusal.
+    fn call(&self, request: Request) -> Result<Response, ApiError>;
+}
+
 /// One claimed folder: who has it in this process, and the lock that
 /// keeps every other process off it.
 struct Claim {
@@ -231,6 +251,8 @@ pub struct Api {
     /// Which project folders are open on this machine, across this API
     /// and a window it is embedded in.
     open: OpenProjects,
+    /// The window, when live mode lets a caller edit what it shows.
+    window: Option<Arc<dyn WindowBridge>>,
     titles: Titles,
     cutouts: Arc<Cutouts>,
     stabilizers: Arc<Stabilizers>,
@@ -298,6 +320,7 @@ impl Api {
             sessions: BTreeMap::new(),
             roots: Vec::new(),
             open: OpenProjects::default(),
+            window: None,
             events,
             jobs: Jobs::default(),
             dirs,
@@ -355,6 +378,21 @@ impl Api {
     /// round.
     pub fn share_open_projects(&mut self, open: OpenProjects) {
         self.open = open;
+    }
+
+    /// Takes an embedder's window as where a request naming the open
+    /// project goes: live mode, with the switch that allows it turned on.
+    /// Adds `live` to what [`VersionInfo::capabilities`] reports, so a
+    /// caller can ask rather than guess.
+    pub fn share_window(&mut self, window: Arc<dyn WindowBridge>) {
+        self.window = Some(window);
+        self.add_capability("live");
+    }
+
+    /// Whether a request would go to the window rather than to a session
+    /// here: the switch is on and the window holds the folder it names.
+    pub fn is_live_path(&self, path: &str) -> bool {
+        self.window.is_some() && self.open.holder(path) == Some(Holder::Window)
     }
 
     /// Confines every write to `roots`: from here on a created project, an
@@ -426,6 +464,17 @@ impl Api {
     /// it begins reports through the sink from then on.
     pub fn dispatch(&mut self, request: Request) -> Response {
         self.jobs.reap(&self.book);
+        // Live mode: a request naming the project the window has on screen
+        // runs on the window's own document, so the edit shows as it lands
+        // and the window's own ⌘Z takes it back like any other.
+        let live = self.window.is_some()
+            && named_path(&request).is_some_and(|path| self.open.holder(path) == Some(Holder::Window));
+        if live && let Some(window) = self.window.clone() {
+            return match window.call(request) {
+                Ok(response) => response,
+                Err(error) => Response::from(Err::<Reply, ApiError>(error)),
+            };
+        }
         self.run(request).into()
     }
 
@@ -1778,5 +1827,27 @@ mod tests {
             "{}",
             refused.message
         );
+    }
+}
+
+/// The project folder a request names, for the ones that name one: what
+/// live mode matches against the window's register. A probe names a file
+/// and a create names a folder to make a project in, so neither is here.
+fn named_path(request: &Request) -> Option<&str> {
+    match request {
+        Request::ProjectOpen { path }
+        | Request::ProjectClose { path, .. }
+        | Request::ProjectGet { path }
+        | Request::ProjectDocument { path }
+        | Request::ProjectSave { path, .. }
+        | Request::ProjectSetVideo { path, .. }
+        | Request::EditApply { path, .. }
+        | Request::EditUndo { path }
+        | Request::EditRedo { path }
+        | Request::MediaImport { path, .. }
+        | Request::TemplateSave { path, .. }
+        | Request::ExportRun { path, .. }
+        | Request::PreviewFrame { path, .. } => Some(path),
+        _ => None,
     }
 }

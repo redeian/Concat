@@ -617,26 +617,44 @@ impl SettingsPane {
     /// takes effect; a bind that fails turns the switch back off and says
     /// why on the page.
     fn apply_server(&mut self, studio: &mut Studio) {
+        self.server_error = start_server(studio).err().unwrap_or_default();
+    }
+}
+
+/// Starts or stops the API's server to match the preferences: the switch on
+/// the Automation page, and the one thing it does. Called from that page,
+/// and once as the window opens, so an agent meant to drive this window does
+/// not need the user to visit the page first. `Err` is the sentence to show.
+pub fn start_server(studio: &mut Studio) -> Result<(), String> {
         // Detached: the address is free again when this returns, and a
         // call or an export the old server was in the middle of is
         // cancelled and finished off the event loop, not waited for on it.
         if let Some(server) = studio.host.server.take() {
             server.stop_detached();
         }
-        self.server_error.clear();
         let exporter = studio.host.exporter.clone();
         let open_projects = studio.host.open_projects.clone();
         let dirs = studio.host.dirs.clone();
         let prefs = &studio.prefs.server;
+        log::info!(
+            "automation: start_server enabled={} listen={:?} live={:?}",
+            prefs.enabled,
+            prefs.listen,
+            std::env::var_os("CONCAT_LIVE_EDIT")
+        );
+        // Live mode, as #337 asks for it and off unless asked: a caller may
+        // edit the project on screen when this process was started with
+        // CONCAT_LIVE_EDIT set. The switch on this page replaces the
+        // environment variable once it is wired.
+        let live = std::env::var_os("CONCAT_LIVE_EDIT").is_some_and(|value| value != "0");
         if !prefs.enabled {
-            return;
+            return Ok(());
         }
         // A token being typed is weak until it is long enough; the switch
         // stays on and the server waits for it, rather than the switch
         // flipping off at the first keystroke.
         if !prefs.token.is_empty() && concat_server::check_token(&prefs.token).is_err() {
-            self.server_error = tf("settings.tokenTooWeak", &[&concat_server::MIN_TOKEN_CHARS]);
-            return;
+            return Err(tf("settings.tokenTooWeak", &[&concat_server::MIN_TOKEN_CHARS]));
         }
         let started = prefs
             .listen
@@ -659,20 +677,32 @@ impl SettingsPane {
                     let mut api = concat_api::Api::new(events)?;
                     api.share_exporter(exporter);
                     api.share_open_projects(open_projects);
+                    // Live mode, off unless asked for: with it on, a caller
+                    // that names the project on screen edits it there, and
+                    // the window draws the change as it lands. The switch
+                    // on this page is the follow-up; this is the gate that
+                    // keeps today's behaviour while it is unset.
+                    if live {
+                        api.share_window(std::sync::Arc::new(crate::live::Window));
+                    }
                     Ok(api)
                 })
             });
         match started {
-            Ok(server) => studio.host.server = Some(server),
+            Ok(server) => {
+                studio.host.server = Some(server);
+                Ok(())
+            }
             Err(error) => {
                 studio.prefs.server.enabled = false;
                 studio.prefs.save(&studio.host.dirs);
-                self.server_error = error.clone();
                 studio.notify(&error, true);
+                Err(error)
             }
         }
     }
 
+impl SettingsPane {
     /// What the Automation page says under the switch.
     fn server_status(&self, studio: &Studio) -> String {
         match &studio.host.server {

@@ -49,6 +49,7 @@ mod i18n;
 #[cfg(target_os = "ios")]
 mod ios;
 mod keymap;
+mod live;
 mod meters;
 mod platform;
 /// What a phone's own crate installs before the window runs: the way to
@@ -339,6 +340,15 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
         models: Models::new(),
     });
     Shell::install(shell.clone());
+
+    // The Automation server, when the user left it on: an agent that is meant
+    // to drive this window should not need the user to open the page that
+    // starts it first (and live mode is worthless if it takes a click to
+    // arm). A bind that fails says so in the window, as it does from the page.
+    match panes::settings::start_server(&mut shell.studio.borrow_mut()) {
+        Ok(()) => log::info!("automation: start_server returned Ok at launch"),
+        Err(error) => log::warn!("automation: {error}"),
+    }
 
     // The machine's fonts, for the Text inspector's picker. Read on a
     // worker: on a machine with a few thousand faces it is a moment, and
