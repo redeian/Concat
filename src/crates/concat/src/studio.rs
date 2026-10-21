@@ -327,6 +327,16 @@ pub const FRAME_RATES: (f64, f64) = (1.0, 240.0);
 /// A typed frame as the project can hold it: each side within
 /// [`FRAME_SIDES`] and even, rounded to the nearest even number rather
 /// than down, so 1081 becomes 1082 and not a frame a line short.
+/// One picture of a selection, as it was when a stage grip was taken.
+#[derive(Clone, Debug)]
+struct GripStart {
+    id: String,
+    /// The picture's own scale, rotation and place on the frame.
+    scale: f64,
+    rotation: f64,
+    offset: (f64, f64),
+}
+
 /// The lane density a preference asks for, clamped to something usable.
 fn lane_density_of(prefs: &Preferences) -> f32 {
     prefs.lane_density.map_or(1.0, |d| d.clamp(0.4, 1.6))
@@ -881,7 +891,11 @@ pub struct Studio {
     /// The rest of the selection at the moment a stage grip was taken, with
     /// the scale and rotation each started from: a grip scales the whole
     /// selection, each picture about its own centre.
-    grip_group: Vec<(String, f64, f64)>,
+    grip_group: Vec<GripStart>,
+    /// Where the selection's centre was when a grip was taken: a group scale
+    /// moves each picture away from it by the same ratio, so the arrangement
+    /// is kept rather than each picture growing in place.
+    grip_centre: (f64, f64),
     pub playhead: f32,
     pub playing: bool,
     transport: slint::Timer,
@@ -1391,7 +1405,14 @@ const ADJUST_ID: &str = "concat.adjust";
 /// everything beneath it - an adjustment layer is a layer whose chain
 /// starts with the panel's own package.
 fn graded(kind: model::ClipKind) -> bool {
-    kind.is_visual() || kind == model::ClipKind::Layer
+    // A title and a shape are drawn as pictures, so the picture chain applies
+    // to them as it does to footage - and a chain nobody can see is a chain
+    // nobody can take off. https://github.com/jub0t/Concat/issues/470
+    kind.is_visual()
+        || matches!(
+            kind,
+            model::ClipKind::Layer | model::ClipKind::Text | model::ClipKind::Shape
+        )
 }
 
 /// The ease a key put on at `at` inherits: that of whichever key it joins
@@ -2314,6 +2335,7 @@ impl Studio {
             lane_density,
             hide_empty_lanes,
             grip_group: Vec::new(),
+            grip_centre: (0.5, 0.5),
             playhead: 0.0,
             // ~20px a second: a ten-second cut fits a pane at its default width.
             playing: false,
@@ -2598,8 +2620,10 @@ impl Studio {
                 if tallest > 0.0 { tallest } else { LANE_MEDIUM }
             }
         };
-        // Never so short that a name strip cannot be read.
-        (own * self.lane_density).max(12.0)
+        // A lane has to keep room for the name strip and the clip's own
+        // thumbnails: below about 34 pixels they overlap and the timeline
+        // reads as broken rather than compact.
+        (own * self.lane_density).max(34.0)
     }
 
     /// Every lane's height, top-most first.
@@ -6054,23 +6078,27 @@ impl Studio {
         self.flush_commit();
         self.begin_echo();
         // A grip on one picture of a selection is a grip on all of them: what
-        // each of the others started at is taken now, since the echo is where
-        // the drag writes.
+        // each started at, and where the selection's centre was, are taken now
+        // because the echo is where the drag writes.
         let playhead = self.playhead;
         self.grip_group = self
             .edit_targets()
             .into_iter()
-            .filter(|other| other != id)
             .filter_map(|other| {
                 let clip = self.clip(&other)?.clone();
                 let at = place_in(&clip, playhead);
-                Some((
-                    other,
-                    shown(&clip, model::KeyProperty::Scale, at),
-                    shown(&clip, model::KeyProperty::Rotation, at),
-                ))
+                Some(GripStart {
+                    scale: shown(&clip, model::KeyProperty::Scale, at),
+                    rotation: shown(&clip, model::KeyProperty::Rotation, at),
+                    offset: (
+                        shown(&clip, model::KeyProperty::OffsetX, at),
+                        shown(&clip, model::KeyProperty::OffsetY, at),
+                    ),
+                    id: other,
+                })
             })
             .collect();
+        self.grip_centre = self.selection_centre();
         self.gesture = if grip == 4 {
             Gesture::StageRotate {
                 clip: id.to_owned(),
@@ -6311,13 +6339,22 @@ impl Studio {
                     let at = place_in(clip, playhead);
                     write_keyable(clip, model::KeyProperty::Scale, next.clamp(0.05, 8.0), at);
                 }
-                // The others take the same ratio about their own centres, so
-                // a group keeps its proportions instead of piling onto one.
-                for (other, started, _) in self.grip_group.clone() {
-                    if let Some(clip) = self.echo_clip_mut(&other) {
+                // The rest of the selection takes the same ratio, and their
+                // places away from the group's centre take it too: a group
+                // scaled by a third is a third wider, not a row of pictures
+                // each growing in place.
+                let (cx, cy) = self.grip_centre;
+                for start in self.grip_group.clone() {
+                    if let Some(clip) = self.echo_clip_mut(&start.id) {
                         let at = place_in(clip, playhead);
-                        let scaled = (started * ratio).clamp(0.05, 8.0);
+                        let scaled = (start.scale * ratio).clamp(0.05, 8.0);
                         write_keyable(clip, model::KeyProperty::Scale, scaled, at);
+                        let moved = (
+                            cx + (start.offset.0 - cx) * ratio,
+                            cy + (start.offset.1 - cy) * ratio,
+                        );
+                        write_keyable(clip, model::KeyProperty::OffsetX, moved.0, at);
+                        write_keyable(clip, model::KeyProperty::OffsetY, moved.1, at);
                     }
                 }
             }
@@ -6434,10 +6471,10 @@ impl Studio {
                     let at = place_in(clip, playhead);
                     write_keyable(clip, model::KeyProperty::Rotation, next, at);
                 }
-                for (other, _, started) in self.grip_group.clone() {
-                    if let Some(clip) = self.echo_clip_mut(&other) {
+                for start in self.grip_group.clone() {
+                    if let Some(clip) = self.echo_clip_mut(&start.id) {
                         let at = place_in(clip, playhead);
-                        let turned = (started + swept + 180.0).rem_euclid(360.0) - 180.0;
+                        let turned = (start.rotation + swept + 180.0).rem_euclid(360.0) - 180.0;
                         write_keyable(clip, model::KeyProperty::Rotation, turned, at);
                     }
                 }
@@ -6465,7 +6502,7 @@ impl Studio {
             }
             Gesture::StageScale { clip, .. } | Gesture::StageRotate { clip, .. } => {
                 let mut ids = vec![clip];
-                ids.extend(self.grip_group.drain(..).map(|(id, _, _)| id));
+                ids.extend(self.grip_group.drain(..).map(|start| start.id));
                 ids
             }
             Gesture::StageStretch { clip, .. }
@@ -11837,6 +11874,28 @@ impl Studio {
         }
     }
 
+    /// The centre of the selection's pictures on the frame, as fractions of
+    /// its width and height: what a group scale grows away from.
+    fn selection_centre(&self) -> (f64, f64) {
+        let mut boxes: Vec<(f64, f64, f64, f64)> = Vec::new();
+        for id in self.edit_targets() {
+            let Some(clip) = self.clip(&id) else {
+                continue;
+            };
+            let footprint = self.footprint(clip);
+            let (hw, hh) = footprint.half_bounds(self.output_size());
+            boxes.push((footprint.cx - hw, footprint.cy - hh, footprint.cx + hw, footprint.cy + hh));
+        }
+        if boxes.is_empty() {
+            return (0.5, 0.5);
+        }
+        let left = boxes.iter().map(|b| b.0).fold(f64::INFINITY, f64::min);
+        let top = boxes.iter().map(|b| b.1).fold(f64::INFINITY, f64::min);
+        let right = boxes.iter().map(|b| b.2).fold(f64::NEG_INFINITY, f64::max);
+        let bottom = boxes.iter().map(|b| b.3).fold(f64::NEG_INFINITY, f64::max);
+        ((left + right) / 2.0, (top + bottom) / 2.0)
+    }
+
     /// Whether any clip is on `track_id`; what `hide_empty_lanes` asks.
     pub fn lane_has_clips(&self, track_id: &str) -> bool {
         self.timeline().clips.iter().any(|clip| clip.track_id == track_id)
@@ -11845,9 +11904,11 @@ impl Studio {
     /// The timeline's vertical density, stepped: as the sizes say, tight,
     /// tighter. Remembered for the next window.
     pub fn cycle_lane_density(&mut self) -> f32 {
+        // Two steps, not three: a third of a lane's height is where the name
+        // strip and the clip's insets start to overlap.
         self.lane_density = match self.lane_density {
-            d if d > 0.9 => 0.82,
-            d if d > 0.72 => 0.66,
+            d if d > 0.9 => 0.86,
+            d if d > 0.8 => 0.74,
             _ => 1.0,
         };
         self.prefs.lane_density = Some(self.lane_density);
