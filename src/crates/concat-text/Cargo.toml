@@ -8,6 +8,9 @@ publish = false
 description = "Titles as pixels: shapes a text clip's words and rasterises them onto a frame-sized transparent canvas."
 
 [dependencies]
+# ICU's Thai dictionary: Thai words have no spaces between them, and the
+# line-break rules a title is laid out by cut inside them.
+icu_segmenter = "2"
 # Font discovery - the system's faces plus the files a project carries.
 fontdb = "0.23"
 # Shaping: glyph ids and advances from the words, kerning and ligatures

@@ -1,0 +1,30 @@
+format = 2
+
+[effect]
+id = "concat.text-reveal"
+name = "Word Reveal"
+kind = "effect"
+category = "Type"
+order = 1
+intensity = "progress"
+description = "A title arrives one word at a time, in reading order, each fading in where it belongs. Key Progress from 0 to 1 across the clip to run it; on a clip that is not a title it does nothing."
+
+[[param]]
+key = "progress"
+label = "Progress"
+min = 0
+max = 1
+default = 1
+step = 0.01
+animate = true
+
+[[param]]
+key = "softness"
+label = "Softness"
+min = 0
+max = 1
+default = 0.14
+step = 0.01
+
+[wgsl]
+entry = "effect.wgsl"

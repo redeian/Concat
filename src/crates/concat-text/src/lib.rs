@@ -32,6 +32,8 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::ops::Range;
+use icu_segmenter::options::WordBreakInvariantOptions;
+use icu_segmenter::{WordSegmenter, WordSegmenterBorrowed};
 use std::sync::{Arc, Mutex};
 
 use tiny_skia::{
@@ -1249,11 +1251,54 @@ fn words(text: &str, range: Range<usize>) -> Vec<Range<usize>> {
         let lead = word.len() - word.trim_start().len();
         let body = word.trim().len();
         if body > 0 {
-            words.push(start + lead..start + lead + body);
+            let span = start + lead..start + lead + body;
+            // A break is where a line may end, which for Thai is inside a
+            // word as often as at its edge. What a reveal walks is words, so
+            // a Thai stretch goes to the dictionary.
+            if text[span.clone()].chars().any(thai) {
+                words.extend(thai_words(text, span));
+            } else {
+                words.push(span);
+            }
         }
         start = at;
     }
     words
+}
+
+/// The dictionary's words of a Thai `span`, as ranges of `text`. ICU's Thai
+/// dictionary is what turns an unbroken sentence into the words a reader sees;
+/// the line-break rules alone cut between clusters.
+fn thai_words(text: &str, span: Range<usize>) -> Vec<Range<usize>> {
+    // The segmenter holds its dictionary behind `Rc`, so it cannot sit in a
+    // `static`: each thread that lays out a title keeps its own.
+    thread_local! {
+        static THAI: std::cell::RefCell<Option<WordSegmenterBorrowed<'static>>> =
+            const { std::cell::RefCell::new(None) };
+    }
+    THAI.with(|cell| {
+        let mut held = cell.borrow_mut();
+        // Borrowed from the compiled-in data, so it is a handle, not a copy.
+        let segmenter = held
+            .get_or_insert_with(|| WordSegmenter::new_dictionary(WordBreakInvariantOptions::default()))
+            .clone();
+        let body = &text[span.clone()];
+        let mut out = Vec::new();
+        let mut last = 0usize;
+        for end in segmenter.segment_str(body) {
+            if end <= last {
+                continue;
+            }
+            let piece = &body[last..end];
+            let lead = piece.len() - piece.trim_start().len();
+            let len = piece.trim().len();
+            if len > 0 {
+                out.push(span.start + last + lead..span.start + last + lead + len);
+            }
+            last = end;
+        }
+        out
+    })
 }
 
 /// A separable box blur over premultiplied RGBA, run twice for a soft
