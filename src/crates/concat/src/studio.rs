@@ -327,6 +327,11 @@ pub const FRAME_RATES: (f64, f64) = (1.0, 240.0);
 /// A typed frame as the project can hold it: each side within
 /// [`FRAME_SIDES`] and even, rounded to the nearest even number rather
 /// than down, so 1081 becomes 1082 and not a frame a line short.
+/// The lane density a preference asks for, clamped to something usable.
+fn lane_density_of(prefs: &Preferences) -> f32 {
+    prefs.lane_density.map_or(1.0, |d| d.clamp(0.4, 1.6))
+}
+
 pub fn custom_frame(width: f32, height: f32) -> (u32, u32) {
     let side = |value: f32| {
         let (low, high) = FRAME_SIDES;
@@ -867,6 +872,12 @@ pub struct Studio {
     /// about a track that the document does not.
     pub lanes: crate::panes::timeline::TimelinePane,
     pub selection: Vec<String>,
+    /// The timeline's vertical density: every lane is drawn this multiple of
+    /// its own height, so forty lanes fit where thirty did. 1.0 is as the
+    /// per-lane sizes say.
+    pub lane_density: f32,
+    /// Whether lanes with nothing on them are left out of the stack.
+    pub hide_empty_lanes: bool,
     pub playhead: f32,
     pub playing: bool,
     transport: slint::Timer,
@@ -2273,6 +2284,9 @@ impl Studio {
         let languages = i18n::languages(&host.dirs);
         let recents = projects::recents(&host.dirs.config);
         let text_presets = presets::all(&host.dirs);
+        // Read before `prefs` moves into the studio below.
+        let lane_density = lane_density_of(&prefs);
+        let hide_empty_lanes = prefs.hide_empty_lanes.unwrap_or(false);
         let mut studio = Self {
             prefs,
             library: Default::default(),
@@ -2293,6 +2307,8 @@ impl Studio {
             waves: RefCell::new(HashMap::new()),
             lanes: crate::panes::timeline::TimelinePane::default(),
             selection: Vec::new(),
+            lane_density,
+            hide_empty_lanes,
             playhead: 0.0,
             // ~20px a second: a ten-second cut fits a pane at its default width.
             playing: false,
@@ -2553,7 +2569,7 @@ impl Studio {
     /// thing on it, without the lanes having to be typed. An empty one takes
     /// the middle size.
     fn lane_height(&self, lane: &Track) -> f32 {
-        match self.lane_size(&lane.id) {
+        let own = match self.lane_size(&lane.id) {
             TrackSize::Small => LANE_SMALL,
             TrackSize::Medium => LANE_MEDIUM,
             TrackSize::Large => LANE_LARGE,
@@ -2576,7 +2592,9 @@ impl Studio {
                     .fold(0.0_f32, f32::max);
                 if tallest > 0.0 { tallest } else { LANE_MEDIUM }
             }
-        }
+        };
+        // Never so short that a name strip cannot be read.
+        (own * self.lane_density).max(12.0)
     }
 
     /// Every lane's height, top-most first.
@@ -4010,21 +4028,11 @@ impl Studio {
     /// selected together is nothing the inspector edits.
     /// https://github.com/jub0t/Concat/issues/224
     pub fn edit_targets(&self) -> Vec<String> {
-        if let Some(id) = self.sole_selection() {
-            return vec![id];
-        }
-        if self.selection.len() < 2 {
-            return Vec::new();
-        }
-        let titles = self.selection.iter().all(|id| {
-            self.clip(id)
-                .is_some_and(|clip| clip.kind == model::ClipKind::Text)
-        });
-        if titles {
-            self.selection.clone()
-        } else {
-            Vec::new()
-        }
+        // Everything selected, of whatever kind: a knob a clip cannot take is
+        // refused by that clip's own guard, not by the selection. Titles were
+        // the only kind a batch used to accept, which is why a transform over
+        // a mixed selection moved nothing.
+        self.selection.clone()
     }
 
     fn volume_targets(&self) -> Vec<String> {
@@ -4364,7 +4372,56 @@ impl Studio {
 
     /// One edit to the selected clip's chain, as a command. `edit` returns
     /// false to say it changed nothing.
-    fn chain_edit(&mut self, audio: bool, edit: impl FnOnce(&mut Vec<AppliedFilter>) -> bool) {
+    fn chain_edit(&mut self, audio: bool, edit: impl Fn(&mut Vec<AppliedFilter>) -> bool) {
+        // A chain edit over the selection: one command per clip that takes it,
+        // landed as a single batch, so toggling or removing an effect across
+        // several clips is one undo step.
+        let mut commands: Vec<Command> = Vec::new();
+        for clip_id in self.edit_targets() {
+            let Some(clip) = self.clip(&clip_id).cloned() else {
+                continue;
+            };
+            let mut chain = if audio {
+                clip.filters
+            } else {
+                clip.video_effects
+            };
+            if !edit(&mut chain) {
+                continue;
+            }
+            let patch = if audio {
+                ClipPatch {
+                    filters: Some(chain),
+                    ..ClipPatch::default()
+                }
+            } else {
+                ClipPatch {
+                    video_effects: Some(chain),
+                    ..ClipPatch::default()
+                }
+            };
+            commands.push(Command::UpdateClip { clip_id, patch });
+        }
+        self.apply_all(commands);
+    }
+
+    /// Lands `commands` as one step: a batch when there are several, and
+    /// nothing at all when there are none.
+    fn apply_all(&mut self, mut commands: Vec<Command>) {
+        match commands.len() {
+            0 => {}
+            1 => {
+                self.apply(commands.remove(0));
+            }
+            _ => {
+                self.apply(Command::Batch { commands });
+            }
+        }
+    }
+
+    /// One clip's chain, for the callers that predate a selection of them.
+    #[allow(dead_code)]
+    fn chain_edit_one(&mut self, audio: bool, edit: impl FnOnce(&mut Vec<AppliedFilter>) -> bool) {
         let Some(clip_id) = self.sole_selection() else {
             return;
         };
@@ -8957,6 +9014,7 @@ impl Studio {
                 .tracks
                 .iter()
                 .rev()
+                .filter(|lane| !self.hide_empty_lanes || self.lane_has_clips(&lane.id))
                 .map(|lane| {
                     let height = self.lane_height(lane);
                     let row = TrackData {
@@ -11720,6 +11778,32 @@ impl Studio {
         }
     }
 
+    /// Whether any clip is on `track_id`; what `hide_empty_lanes` asks.
+    pub fn lane_has_clips(&self, track_id: &str) -> bool {
+        self.timeline().clips.iter().any(|clip| clip.track_id == track_id)
+    }
+
+    /// The timeline's vertical density, stepped: as the sizes say, tight,
+    /// tighter. Remembered for the next window.
+    pub fn cycle_lane_density(&mut self) -> f32 {
+        self.lane_density = match self.lane_density {
+            d if d > 0.9 => 0.82,
+            d if d > 0.72 => 0.66,
+            _ => 1.0,
+        };
+        self.prefs.lane_density = Some(self.lane_density);
+        self.prefs.save(&self.host.dirs);
+        self.lane_density
+    }
+
+    /// Leave lanes with nothing on them out of the stack, or stop doing that.
+    pub fn toggle_hide_empty_lanes(&mut self) -> bool {
+        self.hide_empty_lanes = !self.hide_empty_lanes;
+        self.prefs.hide_empty_lanes = Some(self.hide_empty_lanes);
+        self.prefs.save(&self.host.dirs);
+        self.hide_empty_lanes
+    }
+
     pub fn set_lane_size(&mut self, row: i32, size: TrackSize) {
         if let Some(id) = self.row_track(row).map(|track| track.id.clone()) {
             self.lanes.lane_view.entry(id).or_default().size = size;
@@ -11866,6 +11950,15 @@ impl Studio {
             "delete-left" => self.delete_to_playhead(PlayheadSide::Left),
             "delete-right" => self.delete_to_playhead(PlayheadSide::Right),
             "select-all" => self.select_all(),
+            // The timeline's vertical density, and lanes with nothing on them.
+            "lane-density" => {
+                let density = self.cycle_lane_density();
+                self.notify(&format!("lanes at {:.0}%", density * 100.0), false);
+            }
+            "hide-empty-lanes" => {
+                let hiding = self.toggle_hide_empty_lanes();
+                self.notify(if hiding { "empty lanes hidden" } else { "empty lanes shown" }, false);
+            }
             // The phone's way out of the clip tools: nothing selected, the
             // way a press on an empty lane leaves it.
             "deselect" => {
