@@ -16,8 +16,8 @@ use std::path::PathBuf;
 pub enum Picked {
     /// Files copied in Finder, in the order they were copied.
     Files(Vec<PathBuf>),
-    /// A picture with no file behind it, as PNG bytes.
-    Png(Vec<u8>),
+    /// A picture with no file behind it, and the extension its bytes are.
+    Image(Vec<u8>, &'static str),
 }
 
 /// What the pasteboard holds, when it is something worth pasting.
@@ -26,7 +26,7 @@ pub fn read() -> Option<Picked> {
     if !files.is_empty() {
         return Some(Picked::Files(files));
     }
-    png().map(Picked::Png)
+    picture()
 }
 
 /// The files on the pasteboard: `public.file-url` gives the first, and the
@@ -43,7 +43,7 @@ fn files() -> Vec<PathBuf> {
         return Vec::new();
     };
     let mut found: Vec<PathBuf> = Vec::new();
-    for kind in ["NSFilenamesPboardType", "public.file-url"] {
+    for kind in ["NSFilenamesPboardType", "public.file-url", "public.url"] {
         let name = NSString::from_str(kind);
         let held: *mut NSString = unsafe { msg_send![board, stringForType: &*name] };
         if held.is_null() {
@@ -77,27 +77,31 @@ fn files() -> Vec<PathBuf> {
     found
 }
 
-/// A picture on the pasteboard, re-encoded as PNG when it arrives as TIFF
-/// (which is what macOS gives a screenshot).
+/// A picture on the pasteboard: PNG when the app wrote one, TIFF when it is a
+/// screenshot, which is most of them. Both are handed on as they are - the
+/// engine's probe reads either - rather than re-encoded through AppKit, which
+/// would mean binding a framework for a format change.
 #[cfg(target_os = "macos")]
-fn png() -> Option<Vec<u8>> {
+fn picture() -> Option<Picked> {
     use objc2::msg_send;
     use objc2::rc::Retained;
     use objc2_foundation::{NSData, NSString};
 
     let board = general()?;
-    let name = NSString::from_str("public.png");
-    let data: *mut NSData = unsafe { msg_send![board, dataForType: &*name] };
-    if !data.is_null() {
-        let held = unsafe { Retained::retain(data) }?;
+    for (kind, extension) in [("public.png", "png"), ("public.tiff", "tiff")] {
+        let name = NSString::from_str(kind);
+        let data: *mut NSData = unsafe { msg_send![board, dataForType: &*name] };
+        if data.is_null() {
+            continue;
+        }
+        let Some(held) = (unsafe { Retained::retain(data) }) else {
+            continue;
+        };
         let bytes = held.to_vec();
         if !bytes.is_empty() {
-            return Some(bytes);
+            return Some(Picked::Image(bytes, extension));
         }
     }
-    // A screenshot arrives as TIFF; `NSBitmapImageRep` would re-encode it, and
-    // the engine's own PNG decoder reads TIFF not at all, so this stays
-    // unimplemented rather than pretending: the file case is the common one.
     None
 }
 
@@ -124,7 +128,7 @@ fn files() -> Vec<PathBuf> {
 }
 
 #[cfg(not(target_os = "macos"))]
-fn png() -> Option<Vec<u8>> {
+fn picture() -> Option<Picked> {
     None
 }
 

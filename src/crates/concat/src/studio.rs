@@ -8375,14 +8375,13 @@ impl Studio {
                     paths.push(self.take_in(file, &folder));
                 }
             }
-            crate::pasteboard::Picked::Png(bytes) => {
+            crate::pasteboard::Picked::Image(bytes, extension) => {
                 let into = std::path::Path::new(&folder).join("media");
                 if std::fs::create_dir_all(&into).is_err() {
                     return false;
                 }
                 let digest = crate::pasteboard::digest(&bytes);
-                let name = format!("{digest}-pasted.png");
-                let path = into.join(&name);
+                let path = into.join(format!("{digest}-pasted.{extension}"));
                 if std::fs::write(&path, &bytes).is_err() {
                     return false;
                 }
@@ -8392,8 +8391,29 @@ impl Studio {
         if paths.is_empty() {
             return false;
         }
+        // A file the project already holds is not imported again: one ⌘V that
+        // reaches the app twice - a menu binding and a key binding - would
+        // otherwise put two cards in the bin for one picture, each with its
+        // own art, which is exactly what it looked like.
+        let known: Vec<String> = self
+            .project()
+            .media
+            .iter()
+            .map(|item| item.path.clone())
+            .collect();
+        let mut fresh: Vec<std::path::PathBuf> = Vec::new();
+        for path in paths {
+            let held = path.to_string_lossy().into_owned();
+            if known.iter().any(|seen| seen == &held) {
+                continue;
+            }
+            fresh.push(path);
+        }
+        if fresh.is_empty() {
+            return true;
+        }
         // The bin imports them; the same message a Finder drop sends.
-        self.handle(crate::Msg::Media(crate::MediaMsg::Import(paths)));
+        self.handle(crate::Msg::Media(crate::MediaMsg::Import(fresh)));
         true
     }
 
