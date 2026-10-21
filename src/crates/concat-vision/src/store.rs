@@ -35,16 +35,68 @@ const CACHED: usize = 300;
 /// The directory a media file's masks for `subject` live in under
 /// `project`.
 ///
-/// Named by a hash of the path rather than the path, like the peaks cache
-/// and for the same reason: a flat, portable name that cannot escape the
-/// folder. The subject is in it too, so a clip asked to keep the person
-/// and one asked to keep the object never read each other's answer.
+/// Named by a fingerprint of the file rather than its path: a flat, portable
+/// name that cannot escape the folder, and one that follows the file when it
+/// is moved or renamed - which is what consolidating a project into its own
+/// folder does. Keyed by path, every mask was orphaned by a move, and a cutout
+/// clip then rendered the picture as shot while its matte sat next to it.
+/// The subject is in the name too, so a clip asked to keep the person and one
+/// asked to keep the object never read each other's answer.
 pub fn mask_dir(project: &Path, media_path: &str, subject: Subject) -> PathBuf {
     project.join("cache").join("masks").join(format!(
         "{:016x}-{}",
-        fnv1a(media_path.as_bytes()),
+        media_fingerprint(media_path),
         subject.key()
     ))
+}
+
+/// A name for a media file that follows the file: its length and the first and
+/// last chunk of it, hashed. Reading two sixty-four kilobyte windows is cheap
+/// even for a two-gigabyte recording, and a copy of the same file shares it -
+/// which is the point, because the same picture should not be analysed twice.
+fn media_fingerprint(path: &str) -> u64 {
+    use std::io::{Read, Seek, SeekFrom};
+    thread_local! {
+        static SEEN: std::cell::RefCell<std::collections::HashMap<String, (u64, u64, u64)>> =
+            std::cell::RefCell::new(std::collections::HashMap::new());
+    }
+    let Ok(meta) = std::fs::metadata(path) else {
+        // Unreadable now: the path is still the only thing to name it by.
+        return fnv1a(path.as_bytes());
+    };
+    let len = meta.len();
+    let stamp = meta
+        .modified()
+        .ok()
+        .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|since| since.as_nanos() as u64)
+        .unwrap_or(0);
+    let cached = SEEN.with(|seen| seen.borrow().get(path).copied());
+    if let Some((held_len, held_stamp, print)) = cached
+        && held_len == len
+        && held_stamp == stamp
+    {
+        return print;
+    }
+    let mut bytes = len.to_le_bytes().to_vec();
+    if let Ok(mut file) = std::fs::File::open(path) {
+        let mut head = [0u8; 64 * 1024];
+        if let Ok(read) = file.read(&mut head) {
+            bytes.extend_from_slice(&head[..read]);
+        }
+        let tail_from = len.saturating_sub(64 * 1024);
+        if file.seek(SeekFrom::Start(tail_from)).is_ok() {
+            let mut tail = Vec::with_capacity(64 * 1024);
+            if file.take(64 * 1024).read_to_end(&mut tail).is_ok() {
+                bytes.extend_from_slice(&tail);
+            }
+        }
+    }
+    let print = fnv1a(&bytes);
+    SEEN.with(|seen| {
+        seen.borrow_mut().insert(path.to_owned(), (len, stamp, print));
+    });
+    print
 }
 
 /// The file naming the model that made a directory's masks.
@@ -546,5 +598,33 @@ mod tests {
         assert!(store.is_empty());
         assert!(!dir.exists());
         assert!(MaskStore::open(&dir).mask_at(0.0).is_none());
+    }
+}
+
+#[cfg(test)]
+mod mask_key_tests {
+    use super::*;
+
+    /// The same picture at a new path is the same mask: consolidating a
+    /// project renames every file it brings in, and keyed by path every cutout
+    /// lost its matte at that moment.
+    #[test]
+    fn a_mask_follows_its_file() {
+        let root = std::env::temp_dir().join(format!("concat-mask-{}", std::process::id()));
+        std::fs::create_dir_all(&root).expect("a folder to test in");
+        let one = root.join("one.bin");
+        let two = root.join("two.bin");
+        std::fs::write(&one, b"the same picture").expect("writes");
+        std::fs::write(&two, b"the same picture").expect("writes");
+        let at_one = mask_dir(&root, one.to_str().expect("utf8"), Subject::Person);
+        let at_two = mask_dir(&root, two.to_str().expect("utf8"), Subject::Person);
+        assert_eq!(at_one, at_two, "a renamed file keeps its masks");
+
+        let other = root.join("other.bin");
+        std::fs::write(&other, b"a different picture").expect("writes");
+        let elsewhere = mask_dir(&root, other.to_str().expect("utf8"), Subject::Person);
+        assert_ne!(at_one, elsewhere, "different content is a different mask");
+
+        std::fs::remove_dir_all(&root).ok();
     }
 }
