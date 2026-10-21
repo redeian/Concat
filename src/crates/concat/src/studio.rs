@@ -8351,11 +8351,15 @@ impl Studio {
     /// matched by number, which is what a paste between timelines wanted
     /// and never got: the held lane's id was the other timeline's, and the
     /// add was refused without a word (#290). The new clips are selected.
-    /// A paste of files or a picture from outside the app: they come into the
-    /// project, land in the bin, and go on the timeline at the playhead. Files
-    /// from outside the project folder are copied into it first, named by
-    /// content hash, so what is pasted does not depend on where it came from -
-    /// the same rule `consolidate` applies after the fact.
+    /// A paste of files or a picture from outside the app: what was copied is
+    /// imported as it is. A file keeps its own path - it is linked, not
+    /// copied, so a 2 GB recording pasted by accident does not silently
+    /// double on disk - and a path inside the project folder is stored
+    /// relative to it, which is what makes the folder portable. Bring outside
+    /// files in with `consolidate` when that is what you want, deliberately.
+    ///
+    /// A picture with no file behind it (a screenshot) has no path to link, so
+    /// it is written into the project's `media/` once, named by content.
     ///
     /// Answers false when the clipboard held nothing of the kind, which is the
     /// caller's cue to paste clips instead.
@@ -8371,9 +8375,8 @@ impl Studio {
         let mut paths: Vec<std::path::PathBuf> = Vec::new();
         match picked {
             crate::pasteboard::Picked::Files(files) => {
-                for file in files {
-                    paths.push(self.take_in(file, &folder));
-                }
+                // Linked, not copied: the path is the file's own.
+                paths.extend(files);
             }
             crate::pasteboard::Picked::Image(bytes, extension) => {
                 let into = std::path::Path::new(&folder).join("media");
@@ -8415,36 +8418,6 @@ impl Studio {
         // The bin imports them; the same message a Finder drop sends.
         self.handle(crate::Msg::Media(crate::MediaMsg::Import(fresh)));
         true
-    }
-
-    /// A path as the project holds it: a file already inside the folder stays
-    /// where it is, anything else is copied into `media/` under a name no
-    /// second copy can collide with.
-    fn take_in(&self, file: std::path::PathBuf, folder: &str) -> std::path::PathBuf {
-        let inside = std::path::Path::new(folder)
-            .canonicalize()
-            .ok()
-            .zip(file.canonicalize().ok())
-            .map(|(folder, file)| file.starts_with(folder))
-            .unwrap_or(false);
-        if inside {
-            return file;
-        }
-        let into = std::path::Path::new(folder).join("media");
-        if std::fs::create_dir_all(&into).is_err() {
-            return file;
-        }
-        let name = file
-            .file_name()
-            .map(|name| name.to_string_lossy().into_owned())
-            .unwrap_or_else(|| "pasted".to_owned());
-        let digest = crate::pasteboard::digest_file(&file)
-            .unwrap_or_else(|| "00000000".to_owned());
-        let target = into.join(format!("{digest}-{name}"));
-        if !target.exists() && std::fs::copy(&file, &target).is_err() {
-            return file;
-        }
-        target
     }
 
     pub fn paste_clips(&mut self, after: Option<&str>) {
