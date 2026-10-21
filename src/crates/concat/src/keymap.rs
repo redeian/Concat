@@ -74,6 +74,14 @@ pub const ACTIONS: &[Action] = &[
         defaults: &["ctrl+shift+z"],
     },
     Action {
+        id: "lane-density",
+        defaults: &["ctrl+alt+d"],
+    },
+    Action {
+        id: "hide-empty-lanes",
+        defaults: &["ctrl+alt+e"],
+    },
+    Action {
         id: "select-all",
         defaults: &["ctrl+a"],
     },
