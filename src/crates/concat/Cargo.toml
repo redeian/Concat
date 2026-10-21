@@ -78,6 +78,18 @@ opener = { version = "0.8", features = ["reveal"] }
 # itself on the display winit opened. The same two crates winit draws
 # with, libwayland loaded at run time as winit loads it; libc for the
 # pipe the drop is read through and the poll that waits on it.
+# The pasteboard, through the Objective-C runtime: `NSPasteboard` reached by
+# name, four calls, no AppKit binding compiled. The same crates and versions
+# the iOS pickers use below, so nothing new is pulled in on that target.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = [
+    "std",
+    "NSData",
+    "NSObject",
+    "NSString",
+] }
+
 [target.'cfg(target_os = "linux")'.dependencies]
 wayland-client = "0.31"
 wayland-backend = { version = "0.3", features = ["client_system", "dlopen"] }
