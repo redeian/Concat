@@ -157,6 +157,9 @@ export struct AppliedParamData {
     here: bool,
     prev: bool,
     next: bool,
+    /// The selected clips disagree about this value: what is shown is the
+    /// first clip's, and moving the knob sets them all.
+    mixed: bool,
 }
 
 /// One colour knob of one link - a key's screen colour - drawn as a swatch
@@ -394,7 +397,7 @@ export component PresetStack inherits VerticalLayout {
                             changed data => { knob.value = self.data.value; }
 
                             knob := Param {
-                                label: p.label;
+                                label: p.mixed ? p.label + " (mixed)" : p.label;
                                 value: p.value;
                                 minimum: p.min;
                                 maximum: p.max;

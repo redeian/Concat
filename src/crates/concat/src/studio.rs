@@ -1758,6 +1758,7 @@ fn adjust_rows(chain: &[AppliedFilter], at: Option<f64>) -> Vec<AppliedParamData
                 here,
                 prev,
                 next,
+                mixed: false,
             }
         })
         .collect()
@@ -1815,6 +1816,64 @@ fn chain_colours(chain: &[AppliedFilter]) -> Vec<ColourKnobData> {
 /// knob its package declares, holding the document's value or the default.
 /// A link no package answers to keeps its row - so it can be removed - and
 /// gets no knobs.
+/// The inspector's view of a selection's chains: the links every selected clip
+/// carries, and a knob per parameter, marked mixed where the clips disagree.
+/// One chain - the common case - is just that chain.
+fn chain_rows_for(
+    chains: &[&[AppliedFilter]],
+    at: Option<f64>,
+) -> (Vec<AppliedEntryData>, Vec<AppliedParamData>) {
+    match chains {
+        [] => (Vec::new(), Vec::new()),
+        [only] => chain_rows(only, at),
+        _ => chain_rows_mixed(chains, at),
+    }
+}
+
+/// The links all of `chains` share, in the first one's order. A link only some
+/// clips carry is left out: showing it would promise a knob that touches clips
+/// which do not have it.
+fn chain_rows_mixed(
+    chains: &[&[AppliedFilter]],
+    at: Option<f64>,
+) -> (Vec<AppliedEntryData>, Vec<AppliedParamData>) {
+    let Some(first) = chains.first() else {
+        return (Vec::new(), Vec::new());
+    };
+    let shared: Vec<&AppliedFilter> = first
+        .iter()
+        .filter(|link| {
+            chains
+                .iter()
+                .all(|chain| chain.iter().any(|held| held.id == link.id))
+        })
+        .collect();
+    let (rows, _) = chain_rows(first, at);
+    let rows: Vec<AppliedEntryData> = rows
+        .into_iter()
+        .filter(|row| shared.iter().any(|link| row.id == link.id.as_str()))
+        .collect();
+    let mut knobs = Vec::new();
+    for (index, link) in shared.iter().enumerate() {
+        let (_, held) = chain_rows(std::slice::from_ref(link), at);
+        for mut knob in held {
+            let key = knob.key.to_string();
+            let others: Vec<&AppliedFilter> = chains
+                .iter()
+                .filter_map(|chain| chain.iter().find(|other| other.id == link.id))
+                .collect();
+            let values: Vec<Option<f64>> = others
+                .iter()
+                .map(|other| other.params.get(&key).copied())
+                .collect();
+            knob.mixed = values.windows(2).any(|pair| pair[0] != pair[1]);
+            knob.entry = index as i32;
+            knobs.push(knob);
+        }
+    }
+    (rows, knobs)
+}
+
 fn chain_rows(chain: &[AppliedFilter], at: Option<f64>) -> (Vec<AppliedEntryData>, Vec<AppliedParamData>) {
     let catalogue = Catalogue::builtin();
     let mut rows = Vec::new();
@@ -1862,6 +1921,7 @@ fn chain_rows(chain: &[AppliedFilter], at: Option<f64>) -> (Vec<AppliedEntryData
                 here: false,
                 prev: false,
                 next: false,
+                mixed: false,
             });
         }
         // A colour is a swatch of its own (see `chain_colours`), and a wheel
@@ -1916,6 +1976,7 @@ fn chain_rows(chain: &[AppliedFilter], at: Option<f64>) -> (Vec<AppliedEntryData
                 here,
                 prev,
                 next,
+                mixed: false,
             });
         }
     }
@@ -4185,6 +4246,20 @@ impl Studio {
                 refused_a_still = true;
                 continue;
             }
+            // One of a kind per clip: clicking the same card twice, or on a
+            // selection where some clips already carry it, must not stack a
+            // second copy of the same effect on the same picture.
+            let chain = if video {
+                &clip.video_effects
+            } else {
+                &clip.filters
+            };
+            if chain
+                .iter()
+                .any(|held| held.id == id || held.id == id.replace("concat.", ""))
+            {
+                continue;
+            }
             let mut entry = AppliedFilter::new(id);
             // A package that is an arrival arrives: the knob it names is keyed
             // from its rest value to its end, so a card clicked with nothing
@@ -4417,36 +4492,42 @@ impl Studio {
     /// Drops one entry from the selected clip's chains, by the row id the
     /// inspector shows: video effects count from 1, audio filters from 1000.
     pub fn remove_effect(&mut self, row: i32) {
-        let Some(clip_id) = self.sole_selection() else {
+        // The same link off every selected clip, as one step.
+        let ids = self.edit_targets();
+        if ids.is_empty() {
             return;
-        };
-        let Some(clip) = self.clip(&clip_id).cloned() else {
-            return;
-        };
-        let patch = if row >= 1000 {
-            let index = (row - 1000) as usize;
-            let mut filters = clip.filters.clone();
-            if index >= filters.len() {
-                return;
-            }
-            filters.remove(index);
-            ClipPatch {
-                filters: Some(filters),
-                ..ClipPatch::default()
-            }
-        } else {
-            let index = (row - 1).max(0) as usize;
-            let mut effects = clip.video_effects.clone();
-            if index >= effects.len() {
-                return;
-            }
-            effects.remove(index);
-            ClipPatch {
-                video_effects: Some(effects),
-                ..ClipPatch::default()
-            }
-        };
-        self.apply(Command::UpdateClip { clip_id, patch });
+        }
+        let mut commands: Vec<Command> = Vec::new();
+        for clip_id in ids {
+            let Some(clip) = self.clip(&clip_id).cloned() else {
+                continue;
+            };
+            let patch = if row >= 1000 {
+                let index = (row - 1000) as usize;
+                let mut filters = clip.filters.clone();
+                if index >= filters.len() {
+                    continue;
+                }
+                filters.remove(index);
+                ClipPatch {
+                    filters: Some(filters),
+                    ..ClipPatch::default()
+                }
+            } else {
+                let index = (row - 1).max(0) as usize;
+                let mut effects = clip.video_effects.clone();
+                if index >= effects.len() {
+                    continue;
+                }
+                effects.remove(index);
+                ClipPatch {
+                    video_effects: Some(effects),
+                    ..ClipPatch::default()
+                }
+            };
+            commands.push(Command::UpdateClip { clip_id, patch });
+        }
+        self.apply_all(commands);
     }
 
     // ── the chains ──
@@ -4581,29 +4662,39 @@ impl Studio {
 
     /// One knob of one link, on the echo. `clip_commit` makes it real.
     pub fn chain_set_param(&mut self, audio: bool, index: i32, key: &str, value: f32) {
-        let Some(id) = self.sole_selection() else {
+        // A knob turned on a selection sets that value on every clip that
+        // carries the link - which is what "these differ, changing them makes
+        // them the same" promises - and lands as one undo step.
+        let ids = self.edit_targets();
+        if ids.is_empty() {
+            return;
+        }
+        let Ok(index) = usize::try_from(index) else {
             return;
         };
+        self.commit_targets = ids.clone();
         self.begin_echo();
         let playhead = self.playhead;
-        let Some(clip) = self.echo_clip_mut(&id) else {
-            return;
-        };
-        let at = place_in(clip, playhead);
-        let chain = if audio {
-            &mut clip.filters
-        } else {
-            &mut clip.video_effects
-        };
-        if let Some(entry) = usize::try_from(index).ok().and_then(|i| chain.get_mut(i)) {
-            // A knob that rides is edited where the playhead is: the value
-            // becomes the key there rather than the constant underneath it,
-            // which nothing on screen would show.
-            if entry.is_keyed(key) {
-                let ease = ease_before(entry.keys_on(key), at);
-                entry.set_key(key, at, f64::from(value), ease);
+        for id in ids {
+            let Some(clip) = self.echo_clip_mut(&id) else {
+                continue;
+            };
+            let at = place_in(clip, playhead);
+            let chain = if audio {
+                &mut clip.filters
             } else {
-                entry.params.insert(key.to_owned(), f64::from(value));
+                &mut clip.video_effects
+            };
+            if let Some(entry) = chain.get_mut(index) {
+                // A knob that rides is edited where the playhead is: the value
+                // becomes the key there rather than the constant underneath it,
+                // which nothing on screen would show.
+                if entry.is_keyed(key) {
+                    let ease = ease_before(entry.keys_on(key), at);
+                    entry.set_key(key, at, f64::from(value), ease);
+                } else {
+                    entry.params.insert(key.to_owned(), f64::from(value));
+                }
             }
         }
     }
@@ -9482,16 +9573,28 @@ impl Studio {
 
         // The same chains as the inspector's stacks see them: a row per
         // link and a row per knob, from the catalogue's manifests.
-        let (visual, visual_params, sound, sound_params) =
-            match self.sole_selection().and_then(|id| self.clip(&id)) {
-                Some(clip) => {
-                    let at = place_in(clip, self.playhead);
-                    let (visual, visual_params) = chain_rows(&clip.video_effects, Some(at));
-                    let (sound, sound_params) = chain_rows(&clip.filters, None);
+        // Every selected clip's chains: a selection shows the links they all
+        // carry, with the values they disagree about marked mixed.
+        let (visual, visual_params, sound, sound_params) = {
+            let clips: Vec<&Clip> = self
+                .edit_targets()
+                .iter()
+                .filter_map(|id| self.clip(id))
+                .collect();
+            match clips.split_first() {
+                Some((first, _)) => {
+                    let at = place_in(first, self.playhead);
+                    let visual_chains: Vec<&[AppliedFilter]> =
+                        clips.iter().map(|clip| clip.video_effects.as_slice()).collect();
+                    let sound_chains: Vec<&[AppliedFilter]> =
+                        clips.iter().map(|clip| clip.filters.as_slice()).collect();
+                    let (visual, visual_params) = chain_rows_for(&visual_chains, Some(at));
+                    let (sound, sound_params) = chain_rows_for(&sound_chains, None);
                     (visual, visual_params, sound, sound_params)
                 }
                 None => (Vec::new(), Vec::new(), Vec::new(), Vec::new()),
-            };
+            }
+        };
         sync(&models.applied_visual, visual);
         sync(&models.visual_params, visual_params);
         sync(
