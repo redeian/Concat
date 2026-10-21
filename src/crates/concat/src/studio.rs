@@ -878,6 +878,10 @@ pub struct Studio {
     pub lane_density: f32,
     /// Whether lanes with nothing on them are left out of the stack.
     pub hide_empty_lanes: bool,
+    /// The rest of the selection at the moment a stage grip was taken, with
+    /// the scale and rotation each started from: a grip scales the whole
+    /// selection, each picture about its own centre.
+    grip_group: Vec<(String, f64, f64)>,
     pub playhead: f32,
     pub playing: bool,
     transport: slint::Timer,
@@ -2309,6 +2313,7 @@ impl Studio {
             selection: Vec::new(),
             lane_density,
             hide_empty_lanes,
+            grip_group: Vec::new(),
             playhead: 0.0,
             // ~20px a second: a ten-second cut fits a pane at its default width.
             playing: false,
@@ -4105,41 +4110,56 @@ impl Studio {
 
     /// A catalogue filter or effect, applied to the selected clip's chain.
     pub fn apply_catalogue(&mut self, id: &str, video: bool) {
-        let Some(clip_id) = self.sole_selection() else {
+        // A card goes on every clip that can take it, in one batch: a click
+        // with three titles selected is three clips changed and one undo.
+        let ids = self.edit_targets();
+        if ids.is_empty() {
             self.notify(&t("studio.selectClipTimelineFirst"), true);
             return;
-        };
-        let Some(clip) = self.clip(&clip_id).cloned() else {
-            return;
-        };
-        if video
-            && !(graded(clip.kind)
-                || matches!(clip.kind, model::ClipKind::Text | model::ClipKind::Shape))
-        {
-            self.notify(&t("studio.selectVideoImageText"), true);
+        }
+        let mut commands: Vec<Command> = Vec::new();
+        let mut refused_a_still = false;
+        for clip_id in ids {
+            let Some(clip) = self.clip(&clip_id).cloned() else {
+                continue;
+            };
+            if video
+                && !(graded(clip.kind)
+                    || matches!(clip.kind, model::ClipKind::Text | model::ClipKind::Shape))
+            {
+                continue;
+            }
+            if !video && clip.kind == model::ClipKind::Image {
+                refused_a_still = true;
+                continue;
+            }
+            let entry = AppliedFilter::new(id);
+            let patch = if video {
+                let mut effects = clip.video_effects.clone();
+                effects.push(entry);
+                ClipPatch {
+                    video_effects: Some(effects),
+                    ..ClipPatch::default()
+                }
+            } else {
+                let mut filters = clip.filters.clone();
+                filters.push(entry);
+                ClipPatch {
+                    filters: Some(filters),
+                    ..ClipPatch::default()
+                }
+            };
+            commands.push(Command::UpdateClip { clip_id, patch });
+        }
+        if commands.is_empty() {
+            if refused_a_still {
+                self.notify("A still has no sound to filter", true);
+            } else {
+                self.notify(&t("studio.selectVideoImageText"), true);
+            }
             return;
         }
-        if !video && clip.kind == model::ClipKind::Image {
-            self.notify("A still has no sound to filter", true);
-            return;
-        }
-        let entry = AppliedFilter::new(id);
-        let patch = if video {
-            let mut effects = clip.video_effects.clone();
-            effects.push(entry);
-            ClipPatch {
-                video_effects: Some(effects),
-                ..ClipPatch::default()
-            }
-        } else {
-            let mut filters = clip.filters.clone();
-            filters.push(entry);
-            ClipPatch {
-                filters: Some(filters),
-                ..ClipPatch::default()
-            }
-        };
-        self.apply(Command::UpdateClip { clip_id, patch });
+        self.apply_all(commands);
         // Show it: the applied chain is where the knobs are, and a card
         // that did something with no visible result reads as a card that
         // did nothing.
@@ -6033,6 +6053,24 @@ impl Studio {
         let half = footprint.half_bounds((width, height));
         self.flush_commit();
         self.begin_echo();
+        // A grip on one picture of a selection is a grip on all of them: what
+        // each of the others started at is taken now, since the echo is where
+        // the drag writes.
+        let playhead = self.playhead;
+        self.grip_group = self
+            .edit_targets()
+            .into_iter()
+            .filter(|other| other != id)
+            .filter_map(|other| {
+                let clip = self.clip(&other)?.clone();
+                let at = place_in(&clip, playhead);
+                Some((
+                    other,
+                    shown(&clip, model::KeyProperty::Scale, at),
+                    shown(&clip, model::KeyProperty::Rotation, at),
+                ))
+            })
+            .collect();
         self.gesture = if grip == 4 {
             Gesture::StageRotate {
                 clip: id.to_owned(),
@@ -6268,9 +6306,19 @@ impl Studio {
                     }
                 }
                 let playhead = self.playhead;
+                let ratio = if *scale > 0.0 { next / scale } else { 1.0 };
                 if let Some(clip) = self.echo_clip_mut(clip) {
                     let at = place_in(clip, playhead);
                     write_keyable(clip, model::KeyProperty::Scale, next.clamp(0.05, 8.0), at);
+                }
+                // The others take the same ratio about their own centres, so
+                // a group keeps its proportions instead of piling onto one.
+                for (other, started, _) in self.grip_group.clone() {
+                    if let Some(clip) = self.echo_clip_mut(&other) {
+                        let at = place_in(clip, playhead);
+                        let scaled = (started * ratio).clamp(0.05, 8.0);
+                        write_keyable(clip, model::KeyProperty::Scale, scaled, at);
+                    }
                 }
             }
             Gesture::StageStretch {
@@ -6381,9 +6429,17 @@ impl Studio {
                 // stopping: a turn through the bottom carries on.
                 next = (next + 180.0).rem_euclid(360.0) - 180.0;
                 let playhead = self.playhead;
+                let swept = next - rotation;
                 if let Some(clip) = self.echo_clip_mut(clip) {
                     let at = place_in(clip, playhead);
                     write_keyable(clip, model::KeyProperty::Rotation, next, at);
+                }
+                for (other, _, started) in self.grip_group.clone() {
+                    if let Some(clip) = self.echo_clip_mut(&other) {
+                        let at = place_in(clip, playhead);
+                        let turned = (started + swept + 180.0).rem_euclid(360.0) - 180.0;
+                        write_keyable(clip, model::KeyProperty::Rotation, turned, at);
+                    }
                 }
             }
             _ => {
@@ -6407,9 +6463,12 @@ impl Studio {
             Gesture::StageMove { origins, .. } => {
                 origins.into_iter().map(|origin| origin.clip).collect()
             }
-            Gesture::StageScale { clip, .. }
-            | Gesture::StageRotate { clip, .. }
-            | Gesture::StageStretch { clip, .. }
+            Gesture::StageScale { clip, .. } | Gesture::StageRotate { clip, .. } => {
+                let mut ids = vec![clip];
+                ids.extend(self.grip_group.drain(..).map(|(id, _, _)| id));
+                ids
+            }
+            Gesture::StageStretch { clip, .. }
             | Gesture::StageMask { clip, .. }
             | Gesture::TextWidth { clip, .. } => vec![clip],
             Gesture::Paint {
