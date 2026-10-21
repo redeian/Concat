@@ -180,7 +180,9 @@ serde_json.workspace = true
 toml = "1.1"
 
 # JPEG encoding for the media artwork cache.
-image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+# Decoding a pasted picture, and turning a screenshot's TIFF into the PNG
+# the probe and the painter read.
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "tiff"] }
 
 [build-dependencies]
 slint-build = "1.18"

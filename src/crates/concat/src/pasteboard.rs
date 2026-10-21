@@ -77,10 +77,10 @@ fn files() -> Vec<PathBuf> {
     found
 }
 
-/// A picture on the pasteboard: PNG when the app wrote one, TIFF when it is a
-/// screenshot, which is most of them. Both are handed on as they are - the
-/// engine's probe reads either - rather than re-encoded through AppKit, which
-/// would mean binding a framework for a format change.
+/// A picture on the pasteboard: PNG when the app wrote one, and a screenshot's
+/// TIFF turned into PNG here, because the probe and the painter read PNG and
+/// JPEG - a `.tiff` written through untouched imports and then draws nothing.
+/// Decoding it costs one crate feature, not an AppKit binding.
 #[cfg(target_os = "macos")]
 fn picture() -> Option<Picked> {
     use objc2::msg_send;
@@ -88,21 +88,56 @@ fn picture() -> Option<Picked> {
     use objc2_foundation::{NSData, NSString};
 
     let board = general()?;
-    for (kind, extension) in [("public.png", "png"), ("public.tiff", "tiff")] {
+    let bytes_of = |kind: &str| -> Option<Vec<u8>> {
         let name = NSString::from_str(kind);
         let data: *mut NSData = unsafe { msg_send![board, dataForType: &*name] };
         if data.is_null() {
-            continue;
+            return None;
         }
-        let Some(held) = (unsafe { Retained::retain(data) }) else {
-            continue;
-        };
+        let held = unsafe { Retained::retain(data) }?;
         let bytes = held.to_vec();
-        if !bytes.is_empty() {
-            return Some(Picked::Image(bytes, extension));
-        }
+        (!bytes.is_empty()).then_some(bytes)
+    };
+    if let Some(bytes) = bytes_of("public.png") {
+        return Some(Picked::Image(bytes, "png"));
     }
-    None
+    // A screenshot is TIFF, and only TIFF: it is decoded and re-encoded as PNG
+    // so what lands in `media/` is a picture every reader here understands.
+    let bytes = bytes_of("public.tiff")?;
+    tiff_to_png(&bytes).map(|png| Picked::Image(png, "png"))
+}
+
+/// TIFF bytes as PNG bytes: what a screenshot is, and what every reader here
+/// understands. None when the picture cannot be read at all.
+#[cfg(target_os = "macos")]
+fn tiff_to_png(bytes: &[u8]) -> Option<Vec<u8>> {
+    let picture = image::load_from_memory_with_format(bytes, image::ImageFormat::Tiff).ok()?;
+    let mut png: Vec<u8> = Vec::new();
+    picture
+        .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+        .ok()?;
+    Some(png)
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod picture_tests {
+    use super::*;
+
+    /// A screenshot is TIFF, and a `.tiff` in `media/` imports and then draws
+    /// nothing. What comes out has to be a PNG the decoder here can open.
+    #[test]
+    fn a_screenshot_becomes_a_png() {
+        let mut tiff: Vec<u8> = Vec::new();
+        let picture = image::RgbaImage::from_pixel(8, 6, image::Rgba([9, 40, 200, 255]));
+        image::DynamicImage::ImageRgba8(picture)
+            .write_to(&mut std::io::Cursor::new(&mut tiff), image::ImageFormat::Tiff)
+            .expect("a tiff to convert");
+        let png = tiff_to_png(&tiff).expect("converted");
+        assert_eq!(&png[..8], b"\x89PNG\r\n\x1a\n", "the bytes are a PNG");
+        let back = image::load_from_memory_with_format(&png, image::ImageFormat::Png)
+            .expect("the png decodes");
+        assert_eq!((back.width(), back.height()), (8, 6));
+    }
 }
 
 /// `NSPasteboard.generalPasteboard`, without an AppKit binding.
