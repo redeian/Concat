@@ -65,6 +65,31 @@ pub struct Manifest {
     /// become this one's; see [`Replaces`].
     #[serde(default, rename = "replaces")]
     pub replaces: Vec<Replaces>,
+    /// The arrival this package is: the knob it animates when it is put on a
+    /// clip, and where it travels. A package whose whole point is movement -
+    /// a reveal, a wipe - would otherwise be added at rest and look like it
+    /// did nothing.
+    #[serde(default)]
+    pub enter: Option<Enter>,
+}
+
+/// An `[enter]` table: the animation a package plays when it is added.
+#[derive(Deserialize, Clone, PartialEq, Debug)]
+#[serde(deny_unknown_fields)]
+pub struct Enter {
+    /// The knob, by the manifest key it is declared under.
+    pub key: String,
+    /// Where it starts and where it arrives.
+    pub from: f64,
+    pub to: f64,
+    /// How far along the clip the arrival takes, as a fraction of it: the
+    /// words of a title are usually in place before the clip is over.
+    #[serde(default = "default_until")]
+    pub until: f64,
+}
+
+fn default_until() -> f64 {
+    0.7
 }
 
 /// A `[[replaces]]` table: a retired package this one stands in for. A

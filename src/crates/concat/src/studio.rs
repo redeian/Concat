@@ -4167,7 +4167,21 @@ impl Studio {
                 refused_a_still = true;
                 continue;
             }
-            let entry = AppliedFilter::new(id);
+            let mut entry = AppliedFilter::new(id);
+            // A package that is an arrival arrives: the knob it names is keyed
+            // from its rest value to its end, so a card clicked with nothing
+            // else set does something the person can see.
+            if let Some(enter) = Catalogue::builtin()
+                .packages()
+                .find(|package| package.answers_to(id))
+                .and_then(|package| package.manifest.enter.clone())
+            {
+                // Arrives slowly, settles: the shape a title's arrival wants.
+                let ease = model::KeyEase::OUT;
+                entry.set_key(&enter.key, 0.0, enter.from, ease);
+                let until = (clip.duration * enter.until.clamp(0.05, 1.0)).max(0.0);
+                entry.set_key(&enter.key, until, enter.to, ease);
+            }
             let patch = if video {
                 let mut effects = clip.video_effects.clone();
                 effects.push(entry);

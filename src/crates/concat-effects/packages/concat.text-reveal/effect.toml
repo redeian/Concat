@@ -26,5 +26,13 @@ max = 1
 default = 0.14
 step = 0.01
 
+# It arrives by itself: added to a title, the words are revealed across the
+# first seventy per cent of the clip, so the card does something on a click.
+[enter]
+key = "progress"
+from = 0.0
+to = 1.0
+until = 0.7
+
 [wgsl]
 entry = "effect.wgsl"
