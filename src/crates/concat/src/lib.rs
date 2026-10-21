@@ -32,8 +32,6 @@ mod ui {
 }
 
 mod batch_volume;
-/// What a paste from outside the app - a file, a picture - turns into.
-mod pasteboard;
 // CapyCut: one-click animation presets for titles, shapes and stickers.
 mod animation;
 // CapyCut: punching the camera in and out over a layer.

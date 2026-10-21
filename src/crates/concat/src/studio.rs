@@ -8351,75 +8351,6 @@ impl Studio {
     /// matched by number, which is what a paste between timelines wanted
     /// and never got: the held lane's id was the other timeline's, and the
     /// add was refused without a word (#290). The new clips are selected.
-    /// A paste of files or a picture from outside the app: what was copied is
-    /// imported as it is. A file keeps its own path - it is linked, not
-    /// copied, so a 2 GB recording pasted by accident does not silently
-    /// double on disk - and a path inside the project folder is stored
-    /// relative to it, which is what makes the folder portable. Bring outside
-    /// files in with `consolidate` when that is what you want, deliberately.
-    ///
-    /// A picture with no file behind it (a screenshot) has no path to link, so
-    /// it is written into the project's `media/` once, named by content.
-    ///
-    /// Answers false when the clipboard held nothing of the kind, which is the
-    /// caller's cue to paste clips instead.
-    fn paste_from_outside(&mut self) -> bool {
-        let Some(session) = self.session.as_ref() else {
-            return false;
-        };
-        let folder = session.path().to_owned();
-        let picked = match crate::pasteboard::read() {
-            Some(picked) => picked,
-            None => return false,
-        };
-        let mut paths: Vec<std::path::PathBuf> = Vec::new();
-        match picked {
-            crate::pasteboard::Picked::Files(files) => {
-                // Linked, not copied: the path is the file's own.
-                paths.extend(files);
-            }
-            crate::pasteboard::Picked::Image(bytes, extension) => {
-                let into = std::path::Path::new(&folder).join("media");
-                if std::fs::create_dir_all(&into).is_err() {
-                    return false;
-                }
-                let digest = crate::pasteboard::digest(&bytes);
-                let path = into.join(format!("{digest}-pasted.{extension}"));
-                if std::fs::write(&path, &bytes).is_err() {
-                    return false;
-                }
-                paths.push(path);
-            }
-        }
-        if paths.is_empty() {
-            return false;
-        }
-        // A file the project already holds is not imported again: one ⌘V that
-        // reaches the app twice - a menu binding and a key binding - would
-        // otherwise put two cards in the bin for one picture, each with its
-        // own art, which is exactly what it looked like.
-        let known: Vec<String> = self
-            .project()
-            .media
-            .iter()
-            .map(|item| item.path.clone())
-            .collect();
-        let mut fresh: Vec<std::path::PathBuf> = Vec::new();
-        for path in paths {
-            let held = path.to_string_lossy().into_owned();
-            if known.iter().any(|seen| seen == &held) {
-                continue;
-            }
-            fresh.push(path);
-        }
-        if fresh.is_empty() {
-            return true;
-        }
-        // The bin imports them; the same message a Finder drop sends.
-        self.handle(crate::Msg::Media(crate::MediaMsg::Import(fresh)));
-        true
-    }
-
     pub fn paste_clips(&mut self, after: Option<&str>) {
         if self.clipboard.is_empty() {
             return;
@@ -12402,13 +12333,8 @@ impl Studio {
                 self.freeze_at_playhead();
             }
             // After the selected clip, on its lane, as the menu does; with
-            // nothing selected, at the playhead on the rows copied from - and
-            // when the clipboard holds files rather than clips, as a media
-            // import that lands at the playhead.
+            // nothing selected, at the playhead on the rows copied from.
             "paste" => {
-                if self.selection.is_empty() && self.paste_from_outside() {
-                    return;
-                }
                 let after = self.sole_selection();
                 self.paste_clips(after.as_deref());
             }
