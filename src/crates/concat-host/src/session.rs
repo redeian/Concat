@@ -76,7 +76,16 @@ impl Session {
     /// every timeline's own frame with it, and those win, because that is
     /// where an edited frame was saved.
     pub fn open(path: &str, settings: DocumentSettings) -> Result<Session, String> {
-        let editor = match projects::read_document(path) {
+        let editor = match projects::read_document(path).map(|document| {
+            // A media path the document stores relative to its own folder
+            // becomes absolute before the engine sees it: the file stays
+            // portable, the engine still gets a path it can open. See
+            // `media_inside`.
+            document.map(|mut held| {
+                media_inside(&mut held, path, Direction::Absolute);
+                held
+            })
+        }) {
             Ok(Some(document)) => match Editor::from_document(&document) {
                 Some(editor) => editor,
                 // The settings-only manifest `create` writes: a project
@@ -286,7 +295,11 @@ impl Session {
                 self.settings.name = trimmed.to_owned();
             }
         }
-        (self.path.clone(), self.editor.to_document(&self.settings))
+        let mut document = self.editor.to_document(&self.settings);
+        // And back to relative on the way out, for the media the project
+        // carries: a folder that can be moved is the whole point.
+        media_inside(&mut document, &self.path, Direction::Relative);
+        (self.path.clone(), document)
     }
 
     /// Writes the session's document to its project folder.
@@ -406,5 +419,56 @@ mod tests {
         let opened = Session::open(&scratch.to_string_lossy(), settings());
         assert!(opened.is_err(), "a half document is not an empty project");
         let _ = std::fs::remove_dir_all(&scratch);
+    }
+}
+
+/// Which way a media path is being mapped.
+#[derive(Clone, Copy, PartialEq)]
+enum Direction {
+    Absolute,
+    Relative,
+}
+
+/// Maps every media path in `document` between the form the document stores
+/// and the form the engine opens. A path inside the project folder is stored
+/// relative (`media/clip.mp4`), so the folder can be moved or handed to
+/// somebody else and still open; anything outside stays absolute, because
+/// guessing where an outside file lives would be a lie.
+fn media_inside(document: &mut serde_json::Value, folder: &str, direction: Direction) {
+    let folder = folder.trim_end_matches('/');
+    // `concat.json` keeps the bin at the top level; the API's own document
+    // view nests it, so both shapes are read.
+    let media = match document.get_mut("media").and_then(|held| held.as_array_mut()) {
+        Some(media) => media,
+        None => match document
+            .get_mut("project")
+            .and_then(|project| project.get_mut("media"))
+            .and_then(|media| media.as_array_mut())
+        {
+            Some(media) => media,
+            None => return,
+        },
+    };
+    for item in media {
+        let Some(path) = item.get("path").and_then(|path| path.as_str()) else {
+            continue;
+        };
+        let mapped = match direction {
+            Direction::Absolute => {
+                if path.starts_with('/') {
+                    None
+                } else {
+                    Some(format!("{folder}/{path}"))
+                }
+            }
+            Direction::Relative => path
+                .strip_prefix(&format!("{folder}/"))
+                .map(|rest| rest.to_owned()),
+        };
+        if let Some(mapped) = mapped
+            && let Some(slot) = item.get_mut("path")
+        {
+            *slot = serde_json::Value::String(mapped);
+        }
     }
 }
