@@ -2561,21 +2561,33 @@ impl Studio {
     }
 
     pub fn row_track(&self, row: i32) -> Option<&Track> {
-        let tracks = &self.timeline().tracks;
+        let tracks = self.lanes_shown();
         let count = tracks.len() as i32;
         if row < 0 || row >= count {
             return None;
         }
-        tracks.get((count - 1 - row) as usize)
+        tracks.get(row as usize).copied()
     }
 
     pub fn row_of(&self, track_id: &str) -> i32 {
-        let tracks = &self.timeline().tracks;
-        tracks
+        self.lanes_shown()
             .iter()
             .position(|track| track.id == track_id)
-            .map(|index| tracks.len() as i32 - 1 - index as i32)
+            .map(|index| index as i32)
             .unwrap_or(0)
+    }
+
+    /// The lanes the timeline shows, top-most first: every lane, less the ones
+    /// with nothing on them when `hide_empty_lanes` says so. Every row index in
+    /// the window is an index into this list, so a hidden lane cannot leave the
+    /// pointer naming one lane while the stack draws another.
+    fn lanes_shown(&self) -> Vec<&Track> {
+        self.timeline()
+            .tracks
+            .iter()
+            .rev()
+            .filter(|lane| !self.hide_empty_lanes || self.lane_has_clips(&lane.id))
+            .collect()
     }
 
     pub fn locked(&self, track_id: &str) -> bool {
@@ -2628,10 +2640,8 @@ impl Studio {
 
     /// Every lane's height, top-most first.
     pub fn lane_heights(&self) -> Vec<f32> {
-        self.timeline()
-            .tracks
-            .iter()
-            .rev()
+        self.lanes_shown()
+            .into_iter()
             .map(|lane| self.lane_height(lane))
             .collect()
     }
@@ -9106,11 +9116,8 @@ impl Studio {
         let mut top = 0.0;
         sync(
             &models.tracks,
-            timeline
-                .tracks
-                .iter()
-                .rev()
-                .filter(|lane| !self.hide_empty_lanes || self.lane_has_clips(&lane.id))
+            self.lanes_shown()
+                .into_iter()
                 .map(|lane| {
                     let height = self.lane_height(lane);
                     let row = TrackData {

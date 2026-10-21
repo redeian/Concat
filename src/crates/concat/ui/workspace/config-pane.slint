@@ -252,17 +252,17 @@ export component ConfigPane inherits Rectangle {
     /// panel it grades everything beneath it with, and its chain - are the
     /// tab's sections, so an adjustment layer is graded the way a clip is.
     property <bool> is-layer: root.selected.kind == ClipKind.filter;
-    property <[string]> tabs: root.selected.batch-volume ? ["Audio"] : root.is-text ? ["Text", "Animation"]
+    property <[string]> tabs: root.selected.batch-volume ? ["Audio"] : root.is-text ? ["Text", "Effects", "Animation"]
         : root.is-layer ? ["Filter", "Animation"]
-        : root.is-shape ? ["Video", "Animation"]
+        : root.is-shape ? ["Video", "Effects", "Animation"]
         : root.is-image ? ["Video", "Effects", "Animation"]
         : root.is-audio ? ["Audio"]
         : ["Video", "Audio", "Effects", "Animation"];
     /// The same tabs in the interface's language. `tabs` stays English,
     /// because the panels are picked by comparing against it.
-    property <[string]> tabs-shown: root.selected.batch-volume ? [I18n.t("common.audio")] : root.is-text ? [I18n.t("common.text"), I18n.t("configPane.animation")]
+    property <[string]> tabs-shown: root.selected.batch-volume ? [I18n.t("common.audio")] : root.is-text ? [I18n.t("common.text"), I18n.t("common.effects"), I18n.t("configPane.animation")]
         : root.is-layer ? [I18n.t("configPane.filter"), I18n.t("configPane.animation")]
-        : root.is-shape ? [I18n.t("configPane.vectorImage"), I18n.t("configPane.animation")]
+        : root.is-shape ? [I18n.t("configPane.vectorImage"), I18n.t("common.effects"), I18n.t("configPane.animation")]
         : root.is-image ? [I18n.t("common.video"), I18n.t("common.effects"), I18n.t("configPane.animation")]
         : root.is-audio ? [I18n.t("common.audio")]
         : [I18n.t("common.video"), I18n.t("common.audio"), I18n.t("common.effects"), I18n.t("configPane.animation")];
