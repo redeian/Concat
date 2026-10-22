@@ -1,0 +1,18 @@
+id = "capycut.thai-soft"
+name = "ไทย นุ่ม"
+language = "Thai"
+order = 9
+sample = "นุ่ม"
+
+# Mitr at the centre: a soft display face with no outline, for a story that
+# is spoken rather than announced.
+[style]
+content = "ใจความสำคัญ"
+fontFamily = "Mitr"
+fontWeight = 700
+fontSize = 0.105
+color = "#FFFFFF"
+shadow = true
+tracking = 0.01
+lineHeight = 1.36
+maxWidth = 0.86

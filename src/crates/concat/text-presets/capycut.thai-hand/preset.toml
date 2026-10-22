@@ -1,0 +1,16 @@
+id = "capycut.thai-hand"
+name = "ไทย ลายมือ"
+language = "Thai"
+order = 10
+sample = "ลายมือ"
+
+# Sriracha is a brush: the words a vlog writes on its own picture.
+[style]
+content = "เขียนด้วยมือ"
+fontFamily = "Sriracha"
+fontWeight = 400
+fontSize = 0.11
+color = "#FFFFFF"
+shadow = true
+lineHeight = 1.5
+maxWidth = 0.8

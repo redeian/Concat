@@ -1,0 +1,18 @@
+id = "capycut.credits"
+name = "Credits"
+language = "Latin"
+order = 45
+sample = "Aa"
+
+# Small, spaced, left and a little soft: the end of a piece.
+[style]
+content = "Crew and cast"
+fontFamily = "Inter"
+fontWeight = 400
+fontSize = 0.038
+color = "#FFFFFF"
+opacity = 0.9
+tracking = 0.03
+align = "left"
+shadow = true
+lineHeight = 1.6

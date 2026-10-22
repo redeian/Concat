@@ -1,0 +1,21 @@
+id = "capycut.thai-news"
+name = "ไทย ข่าว"
+language = "Thai"
+order = 6
+sample = "ข่าว"
+
+# A news bar: white words on the red Thai broadcasters use, square corners
+# so it reads as a strip rather than a card.
+[style]
+content = "ข่าวด่วน"
+fontFamily = "Sarabun"
+fontWeight = 700
+fontSize = 0.078
+color = "#FFFFFF"
+background = "#B31217"
+backgroundRadius = 0.002
+backgroundPaddingX = 0.03
+backgroundPaddingY = 0.014
+shadow = false
+lineHeight = 1.3
+maxWidth = 0.9

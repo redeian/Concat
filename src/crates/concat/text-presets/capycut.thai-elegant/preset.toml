@@ -1,0 +1,17 @@
+id = "capycut.thai-elegant"
+name = "ไทย หรู"
+language = "Thai"
+order = 12
+sample = "หรู"
+
+# Trirong, spaced out, in old gold: an opening title for something formal.
+[style]
+content = "ความเรียบหรู"
+fontFamily = "Trirong"
+fontWeight = 700
+fontSize = 0.078
+color = "#EADDB4"
+tracking = 0.04
+shadow = true
+lineHeight = 1.5
+maxWidth = 0.8

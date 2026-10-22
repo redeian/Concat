@@ -1,0 +1,16 @@
+id = "capycut.kicker-caps"
+name = "Kicker caps"
+language = "Latin"
+order = 41
+sample = "Aa"
+
+# A small line of spaced capitals above a headline, the way a magazine sets
+# its section name.
+[style]
+content = "EPISODE ONE"
+fontFamily = "Space Grotesk"
+fontWeight = 700
+fontSize = 0.042
+color = "#FFFFFF"
+tracking = 0.22
+shadow = false

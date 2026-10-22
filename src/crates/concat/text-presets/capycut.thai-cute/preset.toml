@@ -1,0 +1,20 @@
+id = "capycut.thai-cute"
+name = "ไทย น่ารัก"
+language = "Thai"
+order = 11
+sample = "น่ารัก"
+
+# Mali inside a rounded pink plate, the way a Thai caption sticker looks.
+[style]
+content = "น่ารักมาก"
+fontFamily = "Mali"
+fontWeight = 700
+fontSize = 0.09
+color = "#FFFFFF"
+background = "#FF5CA8E6"
+backgroundRadius = 0.03
+backgroundPaddingX = 0.03
+backgroundPaddingY = 0.016
+shadow = false
+lineHeight = 1.34
+maxWidth = 0.8

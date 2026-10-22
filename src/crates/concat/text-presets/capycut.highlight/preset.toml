@@ -1,0 +1,18 @@
+id = "capycut.highlight"
+name = "Highlighter"
+language = "Latin"
+order = 44
+sample = "Aa"
+
+# Dark words on a marker-yellow band: a phrase marked the way a page is.
+[style]
+content = "key point"
+fontFamily = "Permanent Marker"
+fontWeight = 400
+fontSize = 0.08
+color = "#111111"
+background = "#FFE45E"
+backgroundRadius = 0.008
+backgroundPaddingX = 0.024
+backgroundPaddingY = 0.008
+shadow = false

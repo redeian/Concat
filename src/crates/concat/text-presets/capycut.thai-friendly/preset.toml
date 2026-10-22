@@ -1,0 +1,18 @@
+id = "capycut.thai-friendly"
+name = "ไทย มนกลม"
+language = "Thai"
+order = 8
+sample = "มนกลม"
+
+# Rounded and pink: a lifestyle or a how-to, where a headline would shout.
+[style]
+content = "มาลองด้วยกันนะ"
+fontFamily = "Kodchasan"
+fontWeight = 700
+fontSize = 0.1
+color = "#FF7AB8"
+strokeWidth = 0.011
+strokeColor = "#FFFFFF"
+shadow = true
+lineHeight = 1.4
+maxWidth = 0.86

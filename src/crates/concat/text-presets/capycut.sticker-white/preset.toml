@@ -1,0 +1,18 @@
+id = "capycut.sticker-white"
+name = "Sticker white"
+language = "Latin"
+order = 40
+sample = "Aa"
+
+# White words in a fat black outline: the sticker look a short-form cut uses
+# for its hook.
+[style]
+content = "STICKER"
+fontFamily = "Archivo Black"
+fontWeight = 400
+fontSize = 0.115
+color = "#FFFFFF"
+strokeWidth = 0.016
+strokeColor = "#000000"
+shadow = true
+maxWidth = 0.86

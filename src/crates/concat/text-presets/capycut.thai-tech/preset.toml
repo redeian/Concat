@@ -1,0 +1,18 @@
+id = "capycut.thai-tech"
+name = "ไทย เทค"
+language = "Thai"
+order = 7
+sample = "เทค"
+
+# Angles and a cyan glow, for a review or a spec video.
+[style]
+content = "AI เปลี่ยนเกม"
+fontFamily = "Chakra Petch"
+fontWeight = 700
+fontSize = 0.095
+color = "#8FF3FF"
+strokeWidth = 0.006
+strokeColor = "#04262E"
+shadow = true
+tracking = 0.02
+maxWidth = 0.86

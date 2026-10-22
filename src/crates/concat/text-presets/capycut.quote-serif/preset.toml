@@ -1,0 +1,18 @@
+id = "capycut.quote-serif"
+name = "Quote serif"
+language = "Latin"
+order = 42
+sample = "Aa"
+
+# An italic serif on the left, for a line someone said.
+[style]
+content = "A line worth keeping"
+fontFamily = "DM Serif Display"
+fontWeight = 400
+italic = true
+fontSize = 0.075
+color = "#FFFFFF"
+align = "left"
+shadow = true
+lineHeight = 1.42
+maxWidth = 0.7

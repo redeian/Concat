@@ -1,0 +1,18 @@
+id = "capycut.news-bar"
+name = "News bar"
+language = "Latin"
+order = 43
+sample = "Aa"
+
+# White on red, square: the strip a broadcast puts under a story.
+[style]
+content = "BREAKING"
+fontFamily = "Hanken Grotesk"
+fontWeight = 700
+fontSize = 0.07
+color = "#FFFFFF"
+background = "#C8102E"
+backgroundRadius = 0.002
+backgroundPaddingX = 0.026
+backgroundPaddingY = 0.012
+shadow = false
