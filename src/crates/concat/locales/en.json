@@ -850,6 +850,7 @@
   "timeline.deleteTrackEmpty": "This empty track will be deleted. You can undo this.",
   "timeline.deleteTrackOneClip": "This track and the clip on it will be deleted. You can undo this.",
   "timeline.deleteTrackTitle": "Delete track?",
+  "timeline.dragIntoThisLane": "Drag a video, a picture or a sound from Media into this lane",
   "timelinePane.freeze": "Freeze",
   "timelinePane.mirror": "Mirror",
   "timelinePane.previewVideoAndAudio": "Preview video and audio",

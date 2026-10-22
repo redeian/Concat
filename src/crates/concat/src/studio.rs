@@ -886,8 +886,6 @@ pub struct Studio {
     /// its own height, so forty lanes fit where thirty did. 1.0 is as the
     /// per-lane sizes say.
     pub lane_density: f32,
-    /// Whether lanes with nothing on them are left out of the stack.
-    pub hide_empty_lanes: bool,
     /// The rest of the selection at the moment a stage grip was taken, with
     /// the scale and rotation each started from: a grip scales the whole
     /// selection, each picture about its own centre.
@@ -2390,7 +2388,6 @@ impl Studio {
         let text_presets = presets::all(&host.dirs);
         // Read before `prefs` moves into the studio below.
         let lane_density = lane_density_of(&prefs);
-        let hide_empty_lanes = prefs.hide_empty_lanes.unwrap_or(false);
         let mut studio = Self {
             prefs,
             library: Default::default(),
@@ -2412,7 +2409,6 @@ impl Studio {
             lanes: crate::panes::timeline::TimelinePane::default(),
             selection: Vec::new(),
             lane_density,
-            hide_empty_lanes,
             grip_group: Vec::new(),
             grip_centre: (0.5, 0.5),
             playhead: 0.0,
@@ -2656,17 +2652,14 @@ impl Studio {
             .unwrap_or(0)
     }
 
-    /// The lanes the timeline shows, top-most first: every lane, less the ones
-    /// with nothing on them when `hide_empty_lanes` says so. Every row index in
-    /// the window is an index into this list, so a hidden lane cannot leave the
-    /// pointer naming one lane while the stack draws another.
+    /// The lanes the timeline shows, top-most first: every lane, the empty
+    /// ones among them. A lane with nothing on it is where the next clip
+    /// goes, so it stays in the stack and the lanes wear a hint instead of
+    /// being hidden. Every row index in the window is an index into this
+    /// list, so a lane that came and went would leave the pointer naming one
+    /// lane while the stack draws another.
     fn lanes_shown(&self) -> Vec<&Track> {
-        self.timeline()
-            .tracks
-            .iter()
-            .rev()
-            .filter(|lane| !self.hide_empty_lanes || self.lane_has_clips(&lane.id))
-            .collect()
+        self.timeline().tracks.iter().rev().collect()
     }
 
     pub fn locked(&self, track_id: &str) -> bool {
@@ -12119,11 +12112,6 @@ impl Studio {
         ((left + right) / 2.0, (top + bottom) / 2.0)
     }
 
-    /// Whether any clip is on `track_id`; what `hide_empty_lanes` asks.
-    pub fn lane_has_clips(&self, track_id: &str) -> bool {
-        self.timeline().clips.iter().any(|clip| clip.track_id == track_id)
-    }
-
     /// The timeline's vertical density, stepped: as the sizes say, tight,
     /// tighter. Remembered for the next window.
     pub fn cycle_lane_density(&mut self) -> f32 {
@@ -12137,14 +12125,6 @@ impl Studio {
         self.prefs.lane_density = Some(self.lane_density);
         self.prefs.save(&self.host.dirs);
         self.lane_density
-    }
-
-    /// Leave lanes with nothing on them out of the stack, or stop doing that.
-    pub fn toggle_hide_empty_lanes(&mut self) -> bool {
-        self.hide_empty_lanes = !self.hide_empty_lanes;
-        self.prefs.hide_empty_lanes = Some(self.hide_empty_lanes);
-        self.prefs.save(&self.host.dirs);
-        self.hide_empty_lanes
     }
 
     pub fn set_lane_size(&mut self, row: i32, size: TrackSize) {
@@ -12293,14 +12273,10 @@ impl Studio {
             "delete-left" => self.delete_to_playhead(PlayheadSide::Left),
             "delete-right" => self.delete_to_playhead(PlayheadSide::Right),
             "select-all" => self.select_all(),
-            // The timeline's vertical density, and lanes with nothing on them.
+            // The timeline's vertical density.
             "lane-density" => {
                 let density = self.cycle_lane_density();
                 self.notify(&format!("lanes at {:.0}%", density * 100.0), false);
-            }
-            "hide-empty-lanes" => {
-                let hiding = self.toggle_hide_empty_lanes();
-                self.notify(if hiding { "empty lanes hidden" } else { "empty lanes shown" }, false);
             }
             // The phone's way out of the clip tools: nothing selected, the
             // way a press on an empty lane leaves it.

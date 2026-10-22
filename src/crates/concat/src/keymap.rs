@@ -78,10 +78,6 @@ pub const ACTIONS: &[Action] = &[
         defaults: &["ctrl+shift+d"],
     },
     Action {
-        id: "hide-empty-lanes",
-        defaults: &["ctrl+shift+e"],
-    },
-    Action {
         id: "select-all",
         defaults: &["ctrl+a"],
     },

@@ -91,6 +91,9 @@ export component TimelinePane inherits Rectangle {
 
     // ── the grid ─────────────────────────────────────────────────────────
     in property <[TrackData]> tracks;
+    /// Nothing is on the cut yet: the lanes draw as one surface with a line
+    /// of instruction on it, see `Lanes.stack-empty`.
+    in property <bool> stack-empty: false;
     in property <[ClipData]> clips;
     in property <float> playhead;
     in property <[float]> key-marks;
@@ -420,6 +423,8 @@ export component TimelinePane inherits Rectangle {
                 width: Math.max(0px, parent.width - root.headers-w - 1px - root.meters-w);
                 height: parent.height;
 
+                lane-hints: true;
+                stack-empty: root.stack-empty;
                 tracks: root.tracks;
                 clips: root.clips;
                 key-marks: root.key-marks;

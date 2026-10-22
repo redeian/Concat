@@ -850,6 +850,7 @@
   "timeline.deleteTrackEmpty": "แทร็กว่างนี้จะถูกลบ คุณเลิกทำได้",
   "timeline.deleteTrackOneClip": "แทร็กนี้และคลิปในแทร็กจะถูกลบ คุณเลิกทำได้",
   "timeline.deleteTrackTitle": "ลบแทร็กไหม",
+  "timeline.dragIntoThisLane": "ลากวิดีโอ ภาพ หรือเสียงจากมีเดียมาวางในเลนนี้",
   "timelinePane.freeze": "หยุดภาพ",
   "timelinePane.mirror": "กลับด้าน",
   "timelinePane.previewVideoAndAudio": "แสดงตัวอย่างวิดีโอและเสียง",

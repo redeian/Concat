@@ -5,6 +5,7 @@ import { Wave } from "../primitives/wave.slint";
 import { Theme } from "../theme/theme.slint";
 import { Fmt, Payload } from "../util.slint";
 import { Glyph, Icon } from "../icons.slint";
+import { I18n } from "../i18n.slint";
 import { ClipData, ClipKind, DropData, TimelineTool, TrackData } from "model.slint";
 import { ContextMenu, MenuItemData } from "../primitives/context-menu.slint";
 
@@ -1067,6 +1068,15 @@ export component Lanes inherits Rectangle {
     /// floor draws a band and the ruler scrubs where it is pressed, as on
     /// a desk.
     in property <bool> finger: false;
+    /// An empty lane wears a line saying where clips come from. On for the
+    /// desk, where a new project opens on four empty lanes; off for a phone,
+    /// whose cut carries its own line over the whole stack.
+    in property <bool> lane-hints: false;
+    /// Nothing is on the cut at all. The stack is then one surface with one
+    /// line of instruction on it, rather than four empty bands each asking
+    /// for the same clip: there is nothing yet to tell apart, and the bands
+    /// are still there to drop onto.
+    in property <bool> stack-empty: false;
 
     callback scrubbed(seconds: float);
     /// A ruler diamond dragged from one instant to another.
@@ -1377,7 +1387,13 @@ export component Lanes inherits Rectangle {
             y: root.ruler-height + track.top - root.track-scroll;
             width: parent.width;
             height: track.height;
-            background: Math.mod(row, 2) == 0 ? Theme.lane : Theme.lane-alt;
+            // A cut with nothing on it is one surface: the bands would only
+            // say "four empty lanes", which is not something to tell apart
+            // until there is a clip to tell them by. The rows stay here and
+            // still take a drop.
+            background: root.stack-empty
+                ? transparent
+                : (Math.mod(row, 2) == 0 ? Theme.lane : Theme.lane-alt);
             visible: self.y + track.height > root.ruler-height && self.y < root.height;
 
             Rectangle {
@@ -1386,7 +1402,23 @@ export component Lanes inherits Rectangle {
                 width: parent.width;
                 height: 1px;
                 background: Theme.line;
+                visible: !root.stack-empty;
             }
+        }
+
+        // The cut with nothing on it: one line, in the middle of the stack,
+        // saying what the whole surface is for. No bands under it, and no
+        // lane to pick out - the first clip makes the lanes mean something.
+        if root.lane-hints && root.stack-empty: Text {
+            x: 24px;
+            y: root.ruler-height + (root.lanes-h - self.height) / 2;
+            width: Math.max(0px, parent.width - 48px);
+            text: I18n.t("timeline.dragIntoThisLane");
+            color: Theme.fg-dim;
+            font-size: Theme.fs;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            wrap: word-wrap;
         }
 
         // The grid: one rule per ruler tick, so a clip edge can be read
