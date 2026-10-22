@@ -268,7 +268,7 @@ const BUNDLED: [&[u8]; 5] = [
 /// (regular) weight: fontdb sets no variation axes. Kosugi Maru carries
 /// Japanese, Secular One and Rubik Scribble Hebrew. The window registers the
 /// same bytes for its preset cards (concat's fonts.rs).
-pub const BASE_FONTS: [&[u8]; 45] = [
+pub const BASE_FONTS: [&[u8]; 54] = [
     include_bytes!("../fonts/Inter-Regular.ttf"),
     include_bytes!("../fonts/Inter-SemiBold.ttf"),
     include_bytes!("../fonts/Inter-Bold.ttf"),
@@ -317,6 +317,21 @@ pub const BASE_FONTS: [&[u8]; 45] = [
     include_bytes!("../fonts/Kanit-Black.ttf"),
     include_bytes!("../fonts/Prompt-Bold.ttf"),
     include_bytes!("../fonts/Prompt-SemiBold.ttf"),
+    // Thai faces for the titles Thai editors write: one weight each, because
+    // a static file's own family name is sometimes its weight's - Google's
+    // Sarabun-ExtraBold says "Sarabun ExtraBold", not "Sarabun" - and the
+    // font picker lists families, so a second weight would arrive as a
+    // family of its own with no other weight behind it. All OFL 1.1, all
+    // covering the Thai block; the licences are beside the files.
+    include_bytes!("../fonts/Sarabun-Bold.ttf"), // news, formal
+    include_bytes!("../fonts/BaiJamjuree-Bold.ttf"), // modern captions
+    include_bytes!("../fonts/ChakraPetch-Bold.ttf"), // tech, games
+    include_bytes!("../fonts/Kodchasan-Bold.ttf"), // rounded, friendly
+    include_bytes!("../fonts/Mitr-Bold.ttf"),   // soft display
+    include_bytes!("../fonts/Chonburi-Regular.ttf"), // heavy Thai display
+    include_bytes!("../fonts/Sriracha-Regular.ttf"), // brush
+    include_bytes!("../fonts/Mali-Bold.ttf"),   // handwriting
+    include_bytes!("../fonts/Trirong-Bold.ttf"), // serif
 ];
 
 /// Noto Sans CJK SC, cut to GB 2312, Big5 level 1, JIS X 0208, KS X 1001's

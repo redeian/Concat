@@ -128,6 +128,21 @@ the OFL allows for Noto, which reserves no font name.
 - **Noto Sans Thai** 2.002 (a subset: the Thai block): Copyright 2022 The Noto Project Authors (https://github.com/notofonts/thai). OFL. See `src/crates/concat-text/fonts/LICENSE-NotoSansThai.txt`.
 - **Kanit** 2.000 (Bold, Black): Copyright 2020 The Kanit Project Authors (https://github.com/cadsondemak/kanit). OFL. See `src/crates/concat-text/fonts/LICENSE-Kanit.txt`. Added by CapyCut for its Thai title presets.
 - **Prompt** 1.001 (Bold, SemiBold): Copyright 2020 The Prompt Project Authors (https://github.com/cadsondemak/prompt). OFL. See `src/crates/concat-text/fonts/LICENSE-Prompt.txt`. Added by CapyCut for its Thai title presets.
+- **Sarabun** (Bold): Copyright 2018 The Sarabun Project Authors (https://github.com/cadsondemak/Sarabun). OFL. See `src/crates/concat-text/fonts/LICENSE-Sarabun.txt`. Added by CapyCut for its Thai news and formal presets.
+- **Bai Jamjuree** (Bold): Copyright 2018 The Bai Jamjuree Project Authors (https://github.com/cadsondemak/BaiJamjuree). OFL. See `src/crates/concat-text/fonts/LICENSE-BaiJamjuree.txt`. Added by CapyCut for its Thai caption presets.
+- **Chakra Petch** (Bold): Copyright 2018 The Chakra Petch Project Authors (https://github.com/cadsondemak/ChakraPetch). OFL. See `src/crates/concat-text/fonts/LICENSE-ChakraPetch.txt`. Added by CapyCut for its Thai tech preset.
+- **Kodchasan** (Bold): Copyright 2018 The Kodchasan Project Authors (https://github.com/cadsondemak/Kodchasan). OFL. See `src/crates/concat-text/fonts/LICENSE-Kodchasan.txt`. Added by CapyCut for its Thai friendly preset.
+- **Mitr** (Bold): Copyright 2018 The Mitr Project Authors (https://github.com/cadsondemak/Mitr). OFL. See `src/crates/concat-text/fonts/LICENSE-Mitr.txt`. Added by CapyCut for its Thai soft preset.
+- **Chonburi** (Regular): Copyright 2018 The Chonburi Project Authors (https://github.com/cadsondemak/Chonburi). OFL. See `src/crates/concat-text/fonts/LICENSE-Chonburi.txt`. Added by CapyCut for its Thai headline preset.
+- **Sriracha** (Regular): Copyright 2018 The Sriracha Project Authors (https://github.com/cadsondemak/Sriracha). OFL. See `src/crates/concat-text/fonts/LICENSE-Sriracha.txt`. Added by CapyCut for its Thai handwriting preset.
+- **Mali** (Bold): Copyright 2018 The Mali Project Authors (https://github.com/cadsondemak/Mali). OFL. See `src/crates/concat-text/fonts/LICENSE-Mali.txt`. Added by CapyCut for its Thai cute preset.
+- **Trirong** (Bold): Copyright 2018 The Trirong Project Authors (https://github.com/cadsondemak/Trirong). OFL. See `src/crates/concat-text/fonts/LICENSE-Trirong.txt`. Added by CapyCut for its Thai elegant preset.
+
+The nine Thai faces above are the static files Google Fonts publishes, one
+weight each: a static file's own family name is sometimes its weight's
+("Sarabun ExtraBold" is a family of its own in the file), and the font
+picker lists families, so a second weight would arrive as a family with no
+other weight behind it.
 
 The licence does not permit selling the font on its own; shipping the
 `fonts/` directory as it stands satisfies it.
