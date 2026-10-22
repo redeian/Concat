@@ -1776,6 +1776,47 @@ pub enum Figure {
     /// The rectangle with its corners rounded away: a pill. What a badge is
     /// drawn on, so a title can sit inside a figure rather than beside one.
     Pill,
+    // CapyCut: the figures a Thai short-form cut reaches for. The plain ones
+    // first, then the arrows, then what a caption points with, then the
+    // decorations, in the order the Shapes shelf lists them.
+    /// A square with its corners taken off, less round than a pill.
+    RoundedSquare,
+    /// A disc wider than it is tall.
+    Ellipse,
+    /// Four points, the top and bottom on the vertical centre.
+    Diamond,
+    /// Six sides, the points left and right.
+    Hexagon,
+    /// A rule with a head on its left end.
+    ArrowLeft,
+    /// A rule standing up, with a head on top.
+    ArrowUp,
+    /// Two arms meeting at a point, the way a signpost points.
+    Chevron,
+    /// A rule that rises as it runs, with a head at its end.
+    ArrowCurved,
+    /// A rounded box with a tail: words someone says.
+    SpeechBubble,
+    /// A cloud of discs: words someone thinks.
+    ThoughtBubble,
+    /// A disc with spikes: a badge or a seal.
+    BadgeBurst,
+    /// A rectangle with one end cut to a point: a price tag, a label.
+    Tag,
+    /// Five points.
+    Star,
+    /// Four points, pinched: a twinkle.
+    Sparkle,
+    /// Two lobes and a point: what a like is.
+    Heart,
+    /// A cross, the arms as thick as the middle.
+    Plus,
+    /// A circle with its middle taken out.
+    Ring,
+    /// Half a disc, the flat edge down.
+    HalfCircle,
+    /// A rectangle drawn as an outline: a border around other things.
+    Frame,
 }
 
 /// Everything about a shape's look, in the document's terms: sizes are
@@ -1793,6 +1834,55 @@ pub struct ShapeStyle {
     pub stroke: String,
     /// The outline's thickness, and a line's or an arrow's own.
     pub stroke_width: f64,
+}
+
+/// A closed figure through `points`, in the order given.
+fn polygon(path: &mut PathBuilder, points: &[(f32, f32)]) {
+    let Some((&(x, y), rest)) = points.split_first() else {
+        return;
+    };
+    path.move_to(x, y);
+    for &(x, y) in rest {
+        path.line_to(x, y);
+    }
+    path.close();
+}
+
+/// A star's outline: `points` spikes between `outer` and `inner`, the first
+/// one straight up.
+fn star(path: &mut PathBuilder, (cx, cy): (f32, f32), outer: f32, inner: f32, points: usize) {
+    let mut ring = Vec::with_capacity(points * 2);
+    let step = std::f32::consts::PI / points as f32;
+    let mut angle = -std::f32::consts::FRAC_PI_2;
+    for index in 0..points * 2 {
+        let radius = if index % 2 == 0 { outer } else { inner };
+        ring.push((cx + radius * angle.cos(), cy + radius * angle.sin()));
+        angle += step;
+    }
+    polygon(path, &ring);
+}
+
+/// A rectangle with its corners taken off by `radius`, as quads.
+fn rounded(
+    path: &mut PathBuilder,
+    (left, top): (f32, f32),
+    (right, bottom): (f32, f32),
+    radius: f32,
+) {
+    let radius = radius
+        .min((right - left) / 2.0)
+        .min((bottom - top) / 2.0)
+        .max(0.0);
+    path.move_to(left + radius, top);
+    path.line_to(right - radius, top);
+    path.quad_to(right, top, right, top + radius);
+    path.line_to(right, bottom - radius);
+    path.quad_to(right, bottom, right - radius, bottom);
+    path.line_to(left + radius, bottom);
+    path.quad_to(left, bottom, left, bottom - radius);
+    path.line_to(left, top + radius);
+    path.quad_to(left, top, left + radius, top);
+    path.close();
 }
 
 /// Paints `style` centred on a `width` × `height` transparent canvas and
@@ -1856,8 +1946,9 @@ fn paint_shape(style: &ShapeStyle, width: u32, height: u32) -> Result<(Pixmap, B
     let frame_h = height as f32;
     let size = (style.size.clamp(0.01, 2.0) as f32) * frame_h;
     // The outline's thickness in pixels, never under a pixel once it is
-    // asked for at all, so a hairline at 480p is still a line.
-    let rule = {
+    // asked for at all, so a hairline at 480p is still a line. A ring and a
+    // frame are drawn as a stroke and take a wall of their own below.
+    let mut rule = {
         let asked = (style.stroke_width.max(0.0) as f32) * frame_h;
         if asked > 0.0 { asked.max(1.0) } else { 0.0 }
     };
@@ -1866,13 +1957,36 @@ fn paint_shape(style: &ShapeStyle, width: u32, height: u32) -> Result<(Pixmap, B
 
     // The figure's own box, before any outline: (w, h), centred.
     let (w, h) = match style.figure {
-        Figure::Square | Figure::Circle => (size, size),
+        Figure::Square
+        | Figure::Circle
+        | Figure::RoundedSquare
+        | Figure::Diamond
+        | Figure::Star
+        | Figure::Sparkle
+        | Figure::BadgeBurst
+        | Figure::Plus => (size, size),
         Figure::Triangle => (size, size * 0.866),
         Figure::Parallelogram | Figure::Trapezoid => (size, size * 0.6),
         Figure::Line => (size, rule),
-        Figure::Arrow => (size, (rule * 4.0).max(size * 0.18)),
+        Figure::Arrow | Figure::ArrowLeft => (size, (rule * 4.0).max(size * 0.18)),
         // CapyCut: wide enough for a word, short enough to read as a plate.
         Figure::Pill => (size, (size * 0.34).max(rule * 2.0)),
+        // CapyCut: the figures added with the Thai library. Each box is the
+        // shape's own proportions, so a caption composed at 1080p keeps them
+        // at 4K; a ring and a frame are drawn as a stroke, so they take a
+        // wall of their own when no outline was asked for.
+        Figure::Ellipse => (size, size * 0.62),
+        Figure::Hexagon => (size, size * 0.86),
+        Figure::Heart => (size, size * 0.9),
+        Figure::ArrowUp => ((rule * 4.0).max(size * 0.18), size),
+        Figure::Chevron => (size, size * 0.8),
+        Figure::ArrowCurved => (size, size * 0.6),
+        Figure::SpeechBubble => (size, size * 0.72),
+        Figure::ThoughtBubble => (size, size * 0.78),
+        Figure::Tag => (size, size * 0.55),
+        Figure::HalfCircle => (size, size * 0.5),
+        Figure::Frame => (size, size * 0.62),
+        Figure::Ring => (size, size),
     };
     let (left, top) = (cx - w / 2.0, cy - h / 2.0);
     let (right, bottom) = (left + w, top + h);
@@ -1947,6 +2061,220 @@ fn paint_shape(style: &ShapeStyle, width: u32, height: u32) -> Result<(Pixmap, B
             path.quad_to(left, top, left + radius, top);
             path.close();
             true
+        }
+        // CapyCut: the figures added with the Thai library, each its own
+        // analytic path on the figure's box. The plain ones first.
+        Figure::RoundedSquare => {
+            rounded(&mut path, (left, top), (right, bottom), size * 0.18);
+            true
+        }
+        Figure::Ellipse => {
+            path.push_oval(
+                Rect::from_ltrb(left, top, right, bottom).ok_or(Error::Canvas(width, height))?,
+            );
+            true
+        }
+        Figure::Diamond => {
+            polygon(&mut path, &[(cx, top), (right, cy), (cx, bottom), (left, cy)]);
+            true
+        }
+        Figure::Hexagon => {
+            polygon(
+                &mut path,
+                &[
+                    (right, cy),
+                    (cx + w / 4.0, bottom),
+                    (cx - w / 4.0, bottom),
+                    (left, cy),
+                    (cx - w / 4.0, top),
+                    (cx + w / 4.0, top),
+                ],
+            );
+            true
+        }
+        Figure::ArrowLeft => {
+            let arm = h / 2.0;
+            let tip = left + rule / 2.0;
+            path.move_to(right - rule / 2.0, cy);
+            path.line_to(tip, cy);
+            path.move_to(tip + arm, cy - arm);
+            path.line_to(tip, cy);
+            path.line_to(tip + arm, cy + arm);
+            false
+        }
+        Figure::ArrowUp => {
+            let arm = w / 2.0;
+            let tip = top + rule / 2.0;
+            path.move_to(cx, bottom - rule / 2.0);
+            path.line_to(cx, tip);
+            path.move_to(cx - arm, tip + arm);
+            path.line_to(cx, tip);
+            path.line_to(cx + arm, tip + arm);
+            false
+        }
+        Figure::Chevron => {
+            // Two arms meeting on the box's right edge: the signpost's
+            // pointing end, which a caption aims at something.
+            path.move_to(left, top);
+            path.line_to(right, cy);
+            path.line_to(left, bottom);
+            false
+        }
+        Figure::ArrowCurved => {
+            // A rule that leaves the box low on the left and rises to the
+            // head on the right, the way a callout points at something.
+            let arm = h / 2.0;
+            let (tip_x, tip_y) = (right - rule / 2.0, cy);
+            path.move_to(left + rule / 2.0, bottom - rule / 2.0);
+            path.cubic_to(
+                left + w * 0.45,
+                bottom - rule / 2.0,
+                right - w * 0.10,
+                bottom - h * 0.20,
+                tip_x,
+                tip_y,
+            );
+            path.move_to(tip_x - arm, tip_y - arm);
+            path.line_to(tip_x, tip_y);
+            path.line_to(tip_x - arm, tip_y + arm);
+            false
+        }
+        Figure::SpeechBubble => {
+            // A plate with a tail on the lower left: the words a speaker's
+            // name points back at them with.
+            let tail = h * 0.20;
+            let base = bottom - tail;
+            let radius = (h * 0.22).min(w * 0.20);
+            path.move_to(left + radius, top);
+            path.line_to(right - radius, top);
+            path.quad_to(right, top, right, top + radius);
+            path.line_to(right, base - radius);
+            path.quad_to(right, base, right - radius, base);
+            path.line_to(left + w * 0.36, base);
+            path.line_to(left + w * 0.10, bottom);
+            path.line_to(left + radius, base);
+            path.quad_to(left, base, left, base - radius);
+            path.line_to(left, top + radius);
+            path.quad_to(left, top, left + radius, top);
+            path.close();
+            true
+        }
+        Figure::ThoughtBubble => {
+            // A cloud over two discs: what someone is thinking, not saying.
+            path.push_oval(
+                Rect::from_ltrb(left, top, right, top + h * 0.76)
+                    .ok_or(Error::Canvas(width, height))?,
+            );
+            path.push_circle(left + w * 0.24, bottom - h * 0.10, h * 0.09);
+            path.push_circle(left + w * 0.10, bottom - h * 0.01, h * 0.055);
+            true
+        }
+        Figure::BadgeBurst => {
+            let outer = w.min(h) / 2.0;
+            star(&mut path, (cx, cy), outer, outer * 0.82, 12);
+            true
+        }
+        Figure::Tag => {
+            polygon(
+                &mut path,
+                &[
+                    (left, top),
+                    (right - w * 0.22, top),
+                    (right, cy),
+                    (right - w * 0.22, bottom),
+                    (left, bottom),
+                ],
+            );
+            true
+        }
+        Figure::Star => {
+            let outer = w.min(h) / 2.0;
+            star(&mut path, (cx, cy), outer, outer * 0.382, 5);
+            true
+        }
+        Figure::Sparkle => {
+            let outer = w.min(h) / 2.0;
+            star(&mut path, (cx, cy), outer, outer * 0.24, 4);
+            true
+        }
+        Figure::Heart => {
+            // Two cubics for the lobes, two for the sides that meet at the
+            // point below: a like, in the proportions a sticker has.
+            let at = |u: f32, v: f32| (left + u * w, top + v * h);
+            let (x, y) = at(0.5, 1.0);
+            path.move_to(x, y);
+            let (a, b) = at(0.08, 0.65);
+            let (c, d) = at(0.0, 0.45);
+            let (e, f) = at(0.0, 0.30);
+            path.cubic_to(a, b, c, d, e, f);
+            let (a, b) = at(0.0, 0.12);
+            let (c, d) = at(0.13, 0.0);
+            let (e, f) = at(0.28, 0.0);
+            path.cubic_to(a, b, c, d, e, f);
+            let (a, b) = at(0.39, 0.0);
+            let (c, d) = at(0.46, 0.06);
+            let (e, f) = at(0.5, 0.12);
+            path.cubic_to(a, b, c, d, e, f);
+            let (a, b) = at(0.54, 0.06);
+            let (c, d) = at(0.61, 0.0);
+            let (e, f) = at(0.72, 0.0);
+            path.cubic_to(a, b, c, d, e, f);
+            let (a, b) = at(0.87, 0.0);
+            let (c, d) = at(1.0, 0.12);
+            let (e, f) = at(1.0, 0.30);
+            path.cubic_to(a, b, c, d, e, f);
+            let (a, b) = at(1.0, 0.45);
+            let (c, d) = at(0.92, 0.65);
+            let (e, f) = at(0.5, 1.0);
+            path.cubic_to(a, b, c, d, e, f);
+            path.close();
+            true
+        }
+        Figure::Plus => {
+            let arm = w * 0.34 / 2.0;
+            polygon(
+                &mut path,
+                &[
+                    (cx - arm, top),
+                    (cx + arm, top),
+                    (cx + arm, cy - arm),
+                    (right, cy - arm),
+                    (right, cy + arm),
+                    (cx + arm, cy + arm),
+                    (cx + arm, bottom),
+                    (cx - arm, bottom),
+                    (cx - arm, cy + arm),
+                    (left, cy + arm),
+                    (left, cy - arm),
+                    (cx - arm, cy - arm),
+                ],
+            );
+            true
+        }
+        Figure::Ring => {
+            // A stroke on a circle: the wall is the outline the style asks
+            // for, and a ring with no wall would be a disc.
+            rule = rule.max(size * 0.08);
+            path.push_circle(cx, cy, ((size - rule) / 2.0).max(1.0));
+            false
+        }
+        Figure::HalfCircle => {
+            // Half a disc over its flat edge, in cubics of the circle's own
+            // quarter, so it reads as round rather than as a hump.
+            const K: f32 = 0.5523;
+            path.move_to(left, cy);
+            path.cubic_to(left, cy - h * K, cx - (w / 2.0) * K, top, cx, top);
+            path.cubic_to(cx + (w / 2.0) * K, top, right, cy - h * K, right, cy);
+            path.close();
+            true
+        }
+        Figure::Frame => {
+            // A stroke on a rectangle: a border around whatever sits inside.
+            rule = rule.max(size * 0.06);
+            path.push_rect(
+                Rect::from_ltrb(left, top, right, bottom).ok_or(Error::Canvas(width, height))?,
+            );
+            false
         }
     };
     let Some(path) = path.finish() else {
@@ -2669,6 +2997,62 @@ mod tests {
         let plated = render(&fonts, &plated, 640, 360).expect("renders");
         assert!(plated.block_width > one.block_width);
         assert!(plated.block_height > one.block_height);
+    }
+
+    /// Every figure paints ink, inside the box it claims, and nothing
+    /// outside it: a figure that painted nothing would place a nothing on
+    /// the picture, and one that spilled would mark the monitor's box wrong.
+    #[test]
+    fn every_figure_paints_inside_its_own_box() {
+        const FIGURES: [Figure; 27] = [
+            Figure::Square,
+            Figure::Circle,
+            Figure::Triangle,
+            Figure::Parallelogram,
+            Figure::Trapezoid,
+            Figure::Line,
+            Figure::Arrow,
+            Figure::Pill,
+            Figure::RoundedSquare,
+            Figure::Ellipse,
+            Figure::Diamond,
+            Figure::Hexagon,
+            Figure::ArrowLeft,
+            Figure::ArrowUp,
+            Figure::Chevron,
+            Figure::ArrowCurved,
+            Figure::SpeechBubble,
+            Figure::ThoughtBubble,
+            Figure::BadgeBurst,
+            Figure::Tag,
+            Figure::Star,
+            Figure::Sparkle,
+            Figure::Heart,
+            Figure::Plus,
+            Figure::Ring,
+            Figure::HalfCircle,
+            Figure::Frame,
+        ];
+        for figure in FIGURES {
+            let style = ShapeStyle {
+                figure,
+                size: 0.5,
+                fill: "#ffffff".to_owned(),
+                stroke: "#ffffff".to_owned(),
+                stroke_width: 0.01,
+            };
+            let frame = render_shape_frame(&style, 200, 200).expect("paints");
+            let ink = frame.rgba.chunks(4).filter(|pixel| pixel[3] > 8).count();
+            assert!(ink > 40, "{figure:?} painted {ink} pixels");
+            assert!(
+                ink < 200 * 200,
+                "{figure:?} painted the whole canvas, so its outline is not its box"
+            );
+            // The box the monitor outlines holds the ink: a figure drawn
+            // outside it would show a bounding box that misses its edges.
+            let (bw, bh) = (frame.block_width as usize, frame.block_height as usize);
+            assert!(bw <= 200 && bh <= 200, "{figure:?} claims {bw}×{bh}");
+        }
     }
 
     /// A shape is painted centred, at the size the style says, and a rule

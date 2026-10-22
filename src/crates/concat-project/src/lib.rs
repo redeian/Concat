@@ -4808,6 +4808,26 @@ mod tests {
         assert_eq!(missing.len(), 0);
     }
 
+    /// Every figure this build knows has one id, that id names it back, and
+    /// a document stores it under that same id: the reader and the writer
+    /// disagreeing about a figure is a project that loses its shapes.
+    #[test]
+    fn every_shape_id_round_trips_through_the_document() {
+        use crate::model::ShapeKind;
+        let mut seen = std::collections::BTreeSet::new();
+        for kind in ShapeKind::ALL {
+            let id = kind.id();
+            assert!(seen.insert(id), "{id} twice");
+            assert_eq!(ShapeKind::parse(id), Some(kind), "{id} does not parse back");
+            let written = serde_json::to_string(&kind).expect("writes");
+            assert_eq!(written, format!("\"{id}\""), "{id} is written as {written}");
+            let read: ShapeKind = serde_json::from_str(&written).expect("reads");
+            assert_eq!(read, kind);
+        }
+        assert_eq!(seen.len(), ShapeKind::ALL.len());
+        assert_eq!(ShapeKind::parse("no-such-figure"), None);
+    }
+
     #[test]
     fn shape_clips_survive_without_media_and_carry_their_figure() {
         use crate::model::{ClipKind, ShapeKind, ShapeStyle};

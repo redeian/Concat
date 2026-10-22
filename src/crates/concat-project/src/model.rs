@@ -1332,7 +1332,7 @@ pub enum TextAlign {
 /// files, so they are stable for ever.
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "kebab-case")]
 pub enum ShapeKind {
     /// Four equal sides; the default, and what the reader falls back to.
     #[default]
@@ -1353,9 +1353,84 @@ pub enum ShapeKind {
     /// The same rectangle with its corners rounded: a badge's plate, and the
     /// one figure a title sits inside rather than beside.
     Pill,
+    // CapyCut: the figures the Thai library added. The rename is kebab-case,
+    // so a name of two words round-trips as the id it is written under -
+    // "rounded-square", not "roundedsquare" - and every name that was one
+    // word before is spelled exactly as it was.
+    /// A square with its corners taken off, less round than a pill.
+    RoundedSquare,
+    /// A disc wider than it is tall.
+    Ellipse,
+    /// Four points, the top and bottom on the vertical centre.
+    Diamond,
+    /// Six sides, the points left and right.
+    Hexagon,
+    /// A rule with a head on its left end.
+    ArrowLeft,
+    /// A rule standing up, with a head on top.
+    ArrowUp,
+    /// Two arms meeting at a point, the way a signpost points.
+    Chevron,
+    /// A rule that rises as it runs, with a head at its end.
+    ArrowCurved,
+    /// A rounded box with a tail: words someone says.
+    SpeechBubble,
+    /// A cloud of discs: words someone thinks.
+    ThoughtBubble,
+    /// A disc with spikes: a badge or a seal.
+    BadgeBurst,
+    /// A rectangle with one end cut to a point: a price tag, a label.
+    Tag,
+    /// Five points.
+    Star,
+    /// Four points, pinched: a twinkle.
+    Sparkle,
+    /// Two lobes and a point: what a like is.
+    Heart,
+    /// A cross, the arms as thick as the middle.
+    Plus,
+    /// A circle with its middle taken out.
+    Ring,
+    /// Half a disc, the flat edge down.
+    HalfCircle,
+    /// A rectangle drawn as an outline: a border around other things.
+    Frame,
 }
 
 impl ShapeKind {
+    /// Every figure this build knows, in the order the Shapes shelf lists
+    /// them: the eight it started with, then the ones the Thai library
+    /// added, plain first, then arrows, then callouts, then decoration.
+    pub const ALL: [ShapeKind; 27] = [
+        ShapeKind::Square,
+        ShapeKind::Circle,
+        ShapeKind::Triangle,
+        ShapeKind::Parallelogram,
+        ShapeKind::Trapezoid,
+        ShapeKind::Line,
+        ShapeKind::Arrow,
+        ShapeKind::Pill,
+        ShapeKind::RoundedSquare,
+        ShapeKind::Ellipse,
+        ShapeKind::Diamond,
+        ShapeKind::Hexagon,
+        ShapeKind::ArrowLeft,
+        ShapeKind::ArrowUp,
+        ShapeKind::Chevron,
+        ShapeKind::ArrowCurved,
+        ShapeKind::SpeechBubble,
+        ShapeKind::ThoughtBubble,
+        ShapeKind::BadgeBurst,
+        ShapeKind::Tag,
+        ShapeKind::Star,
+        ShapeKind::Sparkle,
+        ShapeKind::Heart,
+        ShapeKind::Plus,
+        ShapeKind::Ring,
+        ShapeKind::HalfCircle,
+        ShapeKind::Frame,
+    ];
+
     /// The name a document writes, and what a library payload carries.
     pub fn id(self) -> &'static str {
         match self {
@@ -1368,24 +1443,32 @@ impl ShapeKind {
             ShapeKind::Arrow => "arrow",
             // CapyCut
             ShapeKind::Pill => "pill",
+            // CapyCut: the figures the Thai library added.
+            ShapeKind::RoundedSquare => "rounded-square",
+            ShapeKind::Ellipse => "ellipse",
+            ShapeKind::Diamond => "diamond",
+            ShapeKind::Hexagon => "hexagon",
+            ShapeKind::ArrowLeft => "arrow-left",
+            ShapeKind::ArrowUp => "arrow-up",
+            ShapeKind::Chevron => "chevron",
+            ShapeKind::ArrowCurved => "arrow-curved",
+            ShapeKind::SpeechBubble => "speech-bubble",
+            ShapeKind::ThoughtBubble => "thought-bubble",
+            ShapeKind::BadgeBurst => "badge-burst",
+            ShapeKind::Tag => "tag",
+            ShapeKind::Star => "star",
+            ShapeKind::Sparkle => "sparkle",
+            ShapeKind::Heart => "heart",
+            ShapeKind::Plus => "plus",
+            ShapeKind::Ring => "ring",
+            ShapeKind::HalfCircle => "half-circle",
+            ShapeKind::Frame => "frame",
         }
     }
 
     /// The figure `id` names, if this build knows it.
     pub fn parse(id: &str) -> Option<ShapeKind> {
-        [
-            ShapeKind::Square,
-            ShapeKind::Circle,
-            ShapeKind::Triangle,
-            ShapeKind::Parallelogram,
-            ShapeKind::Trapezoid,
-            ShapeKind::Line,
-            ShapeKind::Arrow,
-            // CapyCut
-            ShapeKind::Pill,
-        ]
-        .into_iter()
-        .find(|kind| kind.id() == id)
+        ShapeKind::ALL.into_iter().find(|kind| kind.id() == id)
     }
 }
 

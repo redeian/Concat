@@ -5964,13 +5964,35 @@ impl Studio {
             let shape = clip.shape.clone().unwrap_or_default();
             let side = shape.size.clamp(0.01, 2.0) * height;
             let (w, h) = match shape.kind {
-                model::ShapeKind::Square | model::ShapeKind::Circle => (side, side),
+                model::ShapeKind::Square
+                | model::ShapeKind::Circle
+                | model::ShapeKind::RoundedSquare
+                | model::ShapeKind::Diamond
+                | model::ShapeKind::Star
+                | model::ShapeKind::Sparkle
+                | model::ShapeKind::BadgeBurst
+                | model::ShapeKind::Plus
+                | model::ShapeKind::Ring => (side, side),
                 model::ShapeKind::Triangle => (side, side * 0.866),
                 model::ShapeKind::Parallelogram | model::ShapeKind::Trapezoid => (side, side * 0.6),
                 model::ShapeKind::Line => (side, shape.stroke_width * height),
-                model::ShapeKind::Arrow => (side, (shape.stroke_width * 4.0).max(0.18) * side),
+                model::ShapeKind::Arrow | model::ShapeKind::ArrowLeft => {
+                    (side, (shape.stroke_width * 4.0).max(0.18) * side)
+                }
                 // CapyCut: the pill's box, as the painter draws it.
                 model::ShapeKind::Pill => (side, (side * 0.34).max(1.0)),
+                // CapyCut: the boxes the painter draws the added figures in.
+                model::ShapeKind::Ellipse => (side, side * 0.62),
+                model::ShapeKind::Hexagon => (side, side * 0.86),
+                model::ShapeKind::Heart => (side, side * 0.9),
+                model::ShapeKind::ArrowUp => ((shape.stroke_width * 4.0).max(0.18) * side, side),
+                model::ShapeKind::Chevron => (side, side * 0.8),
+                model::ShapeKind::ArrowCurved => (side, side * 0.6),
+                model::ShapeKind::SpeechBubble => (side, side * 0.72),
+                model::ShapeKind::ThoughtBubble => (side, side * 0.78),
+                model::ShapeKind::Tag => (side, side * 0.55),
+                model::ShapeKind::HalfCircle => (side, side * 0.5),
+                model::ShapeKind::Frame => (side, side * 0.62),
             };
             (w * clip.scale / width, h * clip.scale / height)
         } else {
