@@ -916,9 +916,9 @@ jobs:
           done
           cp "$STAGE/capycut.desktop" "$appdir/capycut.desktop"
           cp "$STAGE/capycut.desktop" "$appdir/usr/share/applications/capycut.desktop"
-          cp "$STAGE/concat.png" "$appdir/concat.png"
-          cp "$STAGE/concat.png" "$appdir/usr/share/icons/hicolor/256x256/apps/concat.png"
-          ln -s concat.png "$appdir/.DirIcon"
+          cp "$STAGE/capycut.png" "$appdir/capycut.png"
+          cp "$STAGE/capycut.png" "$appdir/usr/share/icons/hicolor/256x256/apps/capycut.png"
+          ln -s capycut.png "$appdir/.DirIcon"
           ln -s usr/bin/concat "$appdir/AppRun"
           # The tool and the runtime it puts at the head of the AppImage,
           # both a named release: left to itself the tool downloads the
