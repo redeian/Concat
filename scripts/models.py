@@ -39,6 +39,11 @@ CRATES = ROOT / "src" / "crates"
 REPO = "jub0t/Concat"
 HOST_MODELS = CRATES / "concat-host" / "src" / "models.rs"
 
+# Where this fork's own installers live. The mirror above is upstream's, and
+# the app still fetches its models from there; a bundle is this fork's file on
+# this fork's releases, so its URL is built from its own repository.
+BUNDLES_REPO = "redeian/Concat"
+
 # Where each family's table lives in the engine, for --check.
 TABLES = {
     "cutout": CRATES / "concat-vision" / "src" / "models.rs",
@@ -52,22 +57,22 @@ TABLES = {
 # version to fill in. Installers and binaries, never an archive of a
 # folder - a person downloads the thing they run.
 BUNDLES = [
-    ("macos", "arm64", "dmg", "Concat-{v}-macos-arm64.dmg"),
-    ("macos", "x86_64", "dmg", "Concat-{v}-macos-x86_64.dmg"),
-    ("linux", "x86_64", "deb", "Concat-{v}-linux-x86_64.deb"),
-    ("linux", "x86_64", "rpm", "Concat-{v}-linux-x86_64.rpm"),
-    ("linux", "x86_64", "appimage", "Concat-{v}-x86_64.AppImage"),
-    ("linux", "x86_64", "pacman", "Concat-{v}-linux-x86_64.pkg.tar.zst"),
-    ("linux", "aarch64", "deb", "Concat-{v}-linux-aarch64.deb"),
-    ("linux", "aarch64", "rpm", "Concat-{v}-linux-aarch64.rpm"),
-    ("linux", "aarch64", "appimage", "Concat-{v}-aarch64.AppImage"),
-    ("linux", "aarch64", "pacman", "Concat-{v}-linux-aarch64.pkg.tar.zst"),
-    ("windows", "x86_64", "setup", "Concat-{v}-windows-x86_64-setup.exe"),
-    ("windows", "x86_64", "msi", "Concat-{v}-windows-x86_64.msi"),
-    ("windows", "aarch64", "setup", "Concat-{v}-windows-aarch64-setup.exe"),
-    ("windows", "aarch64", "msi", "Concat-{v}-windows-aarch64.msi"),
-    ("android", "arm64", "apk", "Concat-{v}-android-arm64.apk"),
-    ("ios", "arm64", "ipa", "Concat-{v}-ios-arm64.ipa"),
+    ("macos", "arm64", "dmg", "CapyCut-{v}-macos-arm64.dmg"),
+    ("macos", "x86_64", "dmg", "CapyCut-{v}-macos-x86_64.dmg"),
+    ("linux", "x86_64", "deb", "CapyCut-{v}-linux-x86_64.deb"),
+    ("linux", "x86_64", "rpm", "CapyCut-{v}-linux-x86_64.rpm"),
+    ("linux", "x86_64", "appimage", "CapyCut-{v}-x86_64.AppImage"),
+    ("linux", "x86_64", "pacman", "CapyCut-{v}-linux-x86_64.pkg.tar.zst"),
+    ("linux", "aarch64", "deb", "CapyCut-{v}-linux-aarch64.deb"),
+    ("linux", "aarch64", "rpm", "CapyCut-{v}-linux-aarch64.rpm"),
+    ("linux", "aarch64", "appimage", "CapyCut-{v}-aarch64.AppImage"),
+    ("linux", "aarch64", "pacman", "CapyCut-{v}-linux-aarch64.pkg.tar.zst"),
+    ("windows", "x86_64", "setup", "CapyCut-{v}-windows-x86_64-setup.exe"),
+    ("windows", "x86_64", "msi", "CapyCut-{v}-windows-x86_64.msi"),
+    ("windows", "aarch64", "setup", "CapyCut-{v}-windows-aarch64-setup.exe"),
+    ("windows", "aarch64", "msi", "CapyCut-{v}-windows-aarch64.msi"),
+    ("android", "arm64", "apk", "CapyCut-{v}-android-arm64.apk"),
+    ("ios", "arm64", "ipa", "CapyCut-{v}-ios-arm64.ipa"),
 ]
 
 
@@ -112,6 +117,10 @@ def hf_mirror(url: str) -> str | None:
 
 def asset_url(release: str, file: str) -> str:
     return f"https://github.com/{REPO}/releases/download/{release}/{file}"
+
+
+def bundle_url(release: str, file: str) -> str:
+    return f"https://github.com/{BUNDLES_REPO}/releases/download/{release}/{file}"
 
 
 def engine_id(model: dict) -> str:
@@ -335,7 +344,7 @@ def release_manifest(version: str, tag: str, bundles: pathlib.Path | None) -> di
         file = stem.format(v=version)
         entry = {
             "file": file,
-            "url": asset_url(tag, file),
+            "url": bundle_url(tag, file),
         }
         if bundles is not None:
             path = bundles / file

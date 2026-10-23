@@ -3,8 +3,8 @@ name: Build for phones
 # Builds Concat for Android and iOS and uploads one artifact per phone,
 # named like the desktop bundles from build-app.yml:
 #
-#   Android  arm64  -> Concat-<version>-android-arm64.apk
-#   iOS      arm64  -> Concat-<version>-ios-arm64.ipa
+#   Android  arm64  -> CapyCut-<version>-android-arm64.apk
+#   iOS      arm64  -> CapyCut-<version>-ios-arm64.ipa
 #
 # Reusable, the way build-app.yml is: release.yml calls it on every tag,
 # so a release carries the phones beside the desktops. Pull requests build
@@ -264,14 +264,14 @@ jobs:
         run: |
           set -euo pipefail
           mkdir stage
-          cp src/target/release/apk/Concat.apk "stage/Concat-$VERSION-android-${{ matrix.abi }}.apk"
+          cp src/target/release/apk/Concat.apk "stage/CapyCut-$VERSION-android-${{ matrix.abi }}.apk"
           ls -l stage
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          # Concat-* is what a release publishes; the emulator's APK is
+          # CapyCut-* is what a release publishes; the emulator's APK is
           # named so it never is.
-          name: ${{ matrix.ship && 'Concat-android-arm64' || 'smoke-apk-android-x86_64' }}
+          name: ${{ matrix.ship && 'CapyCut-android-arm64' || 'smoke-apk-android-x86_64' }}
           path: stage/*
           if-no-files-found: error
 
@@ -436,12 +436,12 @@ jobs:
           set -euo pipefail
           mkdir -p stage payload/Payload
           cp -R src/target/aarch64-apple-ios/release/Concat.app payload/Payload/
-          (cd payload && ditto -c -k --keepParent Payload "../stage/Concat-$VERSION-ios-arm64.ipa")
+          (cd payload && ditto -c -k --keepParent Payload "../stage/CapyCut-$VERSION-ios-arm64.ipa")
           ls -l stage
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: Concat-ios-arm64
+          name: CapyCut-ios-arm64
           path: stage/*
           if-no-files-found: error
 

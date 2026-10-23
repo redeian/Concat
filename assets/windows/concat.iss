@@ -1,8 +1,8 @@
-; Concat's Windows installer.
+; CapyCut's Windows installer.
 ;
 ; Built by build-app.yml with Inno Setup from the staged folder the .msi
 ; is also made of, so the two ship the same files; this is the one a
-; person double-clicks, and it puts Concat in the Start menu and can take
+; person double-clicks, and it puts CapyCut in the Start menu and can take
 ; it out again. Everything it needs is handed in on the command line:
 ;
 ;   iscc /DVersion=0.2.8 /DArch=x64compatible /DSuffix=x86_64 ^
@@ -33,22 +33,22 @@
 ; One id for the life of the product, so an install over an older one is
 ; an upgrade and not a second copy.
 AppId={{7B1E5C3A-3B9E-4F0B-9C6D-2F1D0C0A0C47}
-AppName=Concat
+AppName=CapyCut
 AppVersion={#Version}
-AppVerName=Concat {#Version}
-AppPublisher=Concat contributors
-AppPublisherURL=https://github.com/jub0t/Concat
-AppSupportURL=https://github.com/jub0t/Concat/issues
-AppUpdatesURL=https://github.com/jub0t/Concat/releases
-DefaultDirName={autopf}\Concat
-DefaultGroupName=Concat
+AppVerName=CapyCut {#Version}
+AppPublisher=CapyCut contributors
+AppPublisherURL=https://github.com/redeian/Concat
+AppSupportURL=https://github.com/redeian/Concat/issues
+AppUpdatesURL=https://github.com/redeian/Concat/releases
+DefaultDirName={autopf}\CapyCut
+DefaultGroupName=CapyCut
 DisableProgramGroupPage=yes
 LicenseFile=..\..\LICENSE
 OutputDir={#Out}
-OutputBaseFilename=Concat-{#Version}-windows-{#Suffix}-setup
-SetupIconFile=..\icons\concat.ico
-UninstallDisplayIcon={app}\concat.ico
-UninstallDisplayName=Concat
+OutputBaseFilename=CapyCut-{#Version}-windows-{#Suffix}-setup
+SetupIconFile=..\icons\capycut.ico
+UninstallDisplayIcon={app}\capycut.ico
+UninstallDisplayName=CapyCut
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
@@ -108,8 +108,8 @@ Source: "{#Stage}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs crea
 Source: "..\icons\concat.ico"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{autoprograms}\Concat"; Filename: "{app}\concat.exe"; IconFilename: "{app}\concat.ico"
-Name: "{autodesktop}\Concat"; Filename: "{app}\concat.exe"; IconFilename: "{app}\concat.ico"; Tasks: desktopicon
+Name: "{autoprograms}\CapyCut"; Filename: "{app}\concat.exe"; IconFilename: "{app}\capycut.ico"
+Name: "{autodesktop}\CapyCut"; Filename: "{app}\concat.exe"; IconFilename: "{app}\capycut.ico"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\concat.exe"; Description: "{cm:LaunchProgram,Concat}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\concat.exe"; Description: "{cm:LaunchProgram,CapyCut}"; Flags: nowait postinstall skipifsilent

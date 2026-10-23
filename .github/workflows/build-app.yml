@@ -1,13 +1,13 @@
 name: Build app
 
-# Builds Concat - the Slint window, `src/crates/concat` - for every
+# Builds CapyCut - the Slint window, `src/crates/concat` - for every
 # platform and architecture it ships on, each on a runner of that
 # architecture so nothing is cross-compiled, and uploads one artifact per
 # target:
 #
-#   macOS    arm64 (Apple silicon)   x86_64 (Intel)     -> Concat-*.dmg
-#   Linux    x86_64                  aarch64            -> Concat-*.deb, .rpm, .AppImage, .pkg.tar.zst
-#   Windows  x86_64                  (aarch64, #326)    -> Concat-*-setup.exe, .msi
+#   macOS    arm64 (Apple silicon)   x86_64 (Intel)     -> CapyCut-*.dmg
+#   Linux    x86_64                  aarch64            -> CapyCut-*.deb, .rpm, .AppImage, .pkg.tar.zst
+#   Windows  x86_64                  (aarch64, #326)    -> CapyCut-*-setup.exe, .msi
 #
 # Installers and binaries only: the program is not shipped as an archive
 # of a folder to unpack, so what a person downloads is what they run.
@@ -232,7 +232,7 @@ jobs:
         run: |
           version=$(sed -n 's/^version = "\(.*\)"/\1/p' src/Cargo.toml | head -1)
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "Building Concat $version for ${{ matrix.target }}"
+          echo "Building CapyCut $version for ${{ matrix.target }}"
 
       # ── Linux ──────────────────────────────────────────────────────────
       # Slint's Skia renderer links fontconfig and freetype; cpal links
@@ -573,45 +573,45 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
-          app=Concat.app
+          app=CapyCut.app
           rm -rf "$app"
           mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources" "$app/Contents/Frameworks"
           cp "src/target/${{ matrix.target }}/app/concat" "$app/Contents/MacOS/concat"
 
           # The icon set Apple wants: each size and its @2x twin.
-          iconset=Concat.iconset
+          iconset=CapyCut.iconset
           rm -rf "$iconset"; mkdir "$iconset"
           icons=assets/icons
-          cp "$icons/concat_logo_16.png"  "$iconset/icon_16x16.png"
-          cp "$icons/concat_logo_32.png"  "$iconset/icon_16x16@2x.png"
-          cp "$icons/concat_logo_32.png"  "$iconset/icon_32x32.png"
-          cp "$icons/concat_logo_64.png"  "$iconset/icon_32x32@2x.png"
-          cp "$icons/concat_logo_128.png" "$iconset/icon_128x128.png"
-          cp "$icons/concat_logo_256.png" "$iconset/icon_128x128@2x.png"
-          cp "$icons/concat_logo_256.png" "$iconset/icon_256x256.png"
-          cp "$icons/concat_logo_512.png" "$iconset/icon_256x256@2x.png"
-          cp "$icons/concat_logo_512.png" "$iconset/icon_512x512.png"
-          iconutil -c icns "$iconset" -o "$app/Contents/Resources/Concat.icns"
+          cp "$icons/capycut-16.png"  "$iconset/icon_16x16.png"
+          cp "$icons/capycut-32.png"  "$iconset/icon_16x16@2x.png"
+          cp "$icons/capycut-32.png"  "$iconset/icon_32x32.png"
+          cp "$icons/capycut-64.png"  "$iconset/icon_32x32@2x.png"
+          cp "$icons/capycut-128.png" "$iconset/icon_128x128.png"
+          cp "$icons/capycut-256.png" "$iconset/icon_128x128@2x.png"
+          cp "$icons/capycut-256.png" "$iconset/icon_256x256.png"
+          cp "$icons/capycut-512.png" "$iconset/icon_256x256@2x.png"
+          cp "$icons/capycut-512.png" "$iconset/icon_512x512.png"
+          iconutil -c icns "$iconset" -o "$app/Contents/Resources/CapyCut.icns"
 
           cat > "$app/Contents/Info.plist" <<PLIST
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
           <dict>
-            <key>CFBundleName</key><string>Concat</string>
-            <key>CFBundleDisplayName</key><string>Concat</string>
-            <key>CFBundleIdentifier</key><string>app.concat.editor</string>
+            <key>CFBundleName</key><string>CapyCut</string>
+            <key>CFBundleDisplayName</key><string>CapyCut</string>
+            <key>CFBundleIdentifier</key><string>app.capycut.editor</string>
             <key>CFBundleVersion</key><string>${VERSION}</string>
             <key>CFBundleShortVersionString</key><string>${VERSION}</string>
             <key>CFBundleExecutable</key><string>concat</string>
-            <key>CFBundleIconFile</key><string>Concat</string>
+            <key>CFBundleIconFile</key><string>CapyCut</string>
             <key>CFBundlePackageType</key><string>APPL</string>
             <key>LSMinimumSystemVersion</key><string>${MACOSX_DEPLOYMENT_TARGET}</string>
             <key>NSHighResolutionCapable</key><true/>
             <key>NSSupportsAutomaticGraphicsSwitching</key><true/>
             <key>LSApplicationCategoryType</key><string>public.app-category.video</string>
             <key>NSHumanReadableCopyright</key><string>AGPL-3.0-or-later. See THIRD_PARTY_NOTICES.md.</string>
-            <key>NSMicrophoneUsageDescription</key><string>Concat records voiceovers from your microphone.</string>
+            <key>NSMicrophoneUsageDescription</key><string>CapyCut records voiceovers from your microphone.</string>
           </dict>
           </plist>
           PLIST
@@ -669,8 +669,8 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
-          app=Concat.app
-          dmg="Concat-${VERSION}-macos-${{ matrix.arch }}.dmg"
+          app=CapyCut.app
+          dmg="CapyCut-${VERSION}-macos-${{ matrix.arch }}.dmg"
           if [ -n "${CERT_P12}" ] && [ -n "${IDENTITY}" ]; then
             keychain=$RUNNER_TEMP/signing.keychain-db
             echo "$CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
@@ -699,7 +699,7 @@ jobs:
             codesign --force --deep -s - "$app"
           fi
 
-          hdiutil create -volname Concat -srcfolder "$app" -ov -format UDZO "$dmg"
+          hdiutil create -volname CapyCut -srcfolder "$app" -ov -format UDZO "$dmg"
 
           if [ -n "${APPLE_ID}" ] && [ -n "${TEAM_ID}" ] && [ -n "${APP_PASSWORD}" ] && [ -n "${IDENTITY}" ]; then
             codesign --force --timestamp -s "$IDENTITY" "$dmg"
@@ -715,7 +715,7 @@ jobs:
       - name: Smoke test (macOS)
         if: matrix.platform == 'macos'
         timeout-minutes: 10
-        run: scripts/ci/smoke-macos.sh Concat.app
+        run: scripts/ci/smoke-macos.sh CapyCut.app
 
       # ── Package: Linux ─────────────────────────────────────────────────
       # The binary, the FFmpeg runtime libraries it loads from lib/ beside
@@ -726,7 +726,7 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
-          name="Concat-${VERSION}-linux-${{ matrix.arch }}"
+          name="CapyCut-${VERSION}-linux-${{ matrix.arch }}"
           mkdir -p "stage/$name/lib"
           cp "src/target/${{ matrix.target }}/app/concat" "stage/$name/concat"
           cp -a ffmpeg-dev/lib/*.so* "stage/$name/lib/"
@@ -749,14 +749,14 @@ jobs:
                 || { echo "libggml-cpu-$module.so is missing from the build" >&2; exit 1; }
             done
           fi
-          cp assets/icons/concat_logo_256.png "stage/$name/concat.png"
-          cat > "stage/$name/concat.desktop" <<DESKTOP
+          cp assets/icons/capycut-256.png "stage/$name/capycut.png"
+          cat > "stage/$name/capycut.desktop" <<DESKTOP
           [Desktop Entry]
           Type=Application
-          Name=Concat
+          Name=CapyCut
           Comment=Video editor
           Exec=concat
-          Icon=concat
+          Icon=capycut
           Categories=AudioVideo;Video;
           Terminal=false
           StartupWMClass=concat
@@ -799,7 +799,7 @@ jobs:
             tar -xJf sde.tar.xz -C sde --strip-components=1
             args+=(--sde "$PWD/sde/sde64")
           fi
-          scripts/ci/smoke-linux.sh "${args[@]}" "stage/Concat-${VERSION}-linux-${{ matrix.arch }}"
+          scripts/ci/smoke-linux.sh "${args[@]}" "stage/CapyCut-${VERSION}-linux-${{ matrix.arch }}"
 
       # Every x86_64 binary in the folder, disassembled and counted for
       # instructions an Ivy Bridge does not have, against what
@@ -812,7 +812,7 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get install -y llvm
-          scripts/ci/isa-scan.sh "stage/Concat-${VERSION}-linux-${{ matrix.arch }}"
+          scripts/ci/isa-scan.sh "stage/CapyCut-${VERSION}-linux-${{ matrix.arch }}"
 
       # Arch Linux package, from the same folder as the .deb and .rpm.
       # Arch ships x86_64 only, so aarch64 comes from Arch Linux ARM.
@@ -822,7 +822,7 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
-          name="Concat-${VERSION}-linux-${{ matrix.arch }}"
+          name="CapyCut-${VERSION}-linux-${{ matrix.arch }}"
           pkgver="${VERSION//-/_}"
           image=archlinux:base-devel
           if [ "${{ matrix.arch }}" = aarch64 ]; then
@@ -870,7 +870,7 @@ jobs:
           ARCH: ${{ matrix.appimage }}
         run: |
           set -euo pipefail
-          name="Concat-${VERSION}-linux-${{ matrix.arch }}"
+          name="CapyCut-${VERSION}-linux-${{ matrix.arch }}"
           export STAGE="$PWD/stage/$name"
 
           # What the packages add over the folder: the launcher, and a
@@ -878,7 +878,7 @@ jobs:
           mkdir -p "$STAGE/pkg"
           printf '#!/bin/sh\nexec /opt/concat/concat "$@"\n' > "$STAGE/pkg/concat"
           chmod +x "$STAGE/pkg/concat"
-          sed 's|^Exec=concat|Exec=/opt/concat/concat %U|' "$STAGE/concat.desktop" > "$STAGE/pkg/concat.desktop"
+          sed 's|^Exec=concat|Exec=/opt/concat/concat %U|' "$STAGE/capycut.desktop" > "$STAGE/pkg/capycut.desktop"
 
           scripts/ci/fetch.sh "nfpm-$( [ "${{ matrix.arch }}" = x86_64 ] && echo x86_64 || echo arm64 )" nfpm.tar.gz
           mkdir -p nfpm && tar -xzf nfpm.tar.gz -C nfpm
@@ -892,7 +892,7 @@ jobs:
           # The AppDir: the binary and its lib/ under usr/bin, so the
           # rpath holds; the desktop entry and icon at the root, where
           # the tool wants them; AppRun is the binary.
-          appdir="$PWD/Concat.AppDir"
+          appdir="$PWD/CapyCut.AppDir"
           rm -rf "$appdir"
           mkdir -p "$appdir/usr/bin" "$appdir/usr/share/icons/hicolor/256x256/apps" "$appdir/usr/share/applications"
           cp "$STAGE/concat" "$appdir/usr/bin/concat"
@@ -912,8 +912,8 @@ jobs:
           for lib in libxkbcommon.so.0 libxkbcommon-x11.so.0 libxcb-xkb.so.1; do
             cp -L "$(ldconfig -p | awk -v lib="$lib" '$1 == lib { print $NF; exit }')" "$appdir/usr/bin/lib/$lib"
           done
-          cp "$STAGE/concat.desktop" "$appdir/concat.desktop"
-          cp "$STAGE/concat.desktop" "$appdir/usr/share/applications/concat.desktop"
+          cp "$STAGE/capycut.desktop" "$appdir/capycut.desktop"
+          cp "$STAGE/capycut.desktop" "$appdir/usr/share/applications/capycut.desktop"
           cp "$STAGE/concat.png" "$appdir/concat.png"
           cp "$STAGE/concat.png" "$appdir/usr/share/icons/hicolor/256x256/apps/concat.png"
           ln -s concat.png "$appdir/.DirIcon"
@@ -927,7 +927,7 @@ jobs:
           # Extract-and-run: the runner has no FUSE to mount the tool with.
           # No "linux" in its name: every AppImage is for Linux, and the
           # AppImage catalog's check warns about names that say so.
-          appimage="stage/Concat-${VERSION}-${{ matrix.arch }}.AppImage"
+          appimage="stage/CapyCut-${VERSION}-${{ matrix.arch }}.AppImage"
           ./appimagetool --appimage-extract-and-run --runtime-file appimage-runtime "$appdir" "$appimage"
           chmod +x "$appimage"
 
@@ -948,8 +948,8 @@ jobs:
           set -euo pipefail
           for image in ubuntu:22.04 debian:12; do
             scripts/ci/smoke-linux.sh --container "$image" \
-              "stage/Concat-${VERSION}-linux-${{ matrix.arch }}.deb" \
-              "stage/Concat-${VERSION}-${{ matrix.arch }}.AppImage"
+              "stage/CapyCut-${VERSION}-linux-${{ matrix.arch }}.deb" \
+              "stage/CapyCut-${VERSION}-${{ matrix.arch }}.AppImage"
           done
 
       # ── Package: Windows ───────────────────────────────────────────────
@@ -966,7 +966,7 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           $ErrorActionPreference = "Stop"
-          $name = "Concat-$env:VERSION-windows-${{ matrix.arch }}"
+          $name = "CapyCut-$env:VERSION-windows-${{ matrix.arch }}"
           $dir = "stage\$name"
           New-Item -ItemType Directory -Force $dir | Out-Null
           Copy-Item "src\target\${{ matrix.target }}\app\concat.exe" $dir
@@ -1053,12 +1053,12 @@ jobs:
           if (-not $signtool) { throw "signtool.exe is not in the Windows SDK" }
           "SIGNTOOL=$($signtool.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
           "SIGNING_THUMBPRINT=$($cert.Thumbprint)" | Out-File -FilePath $env:GITHUB_ENV -Append
-          $dir = "stage\Concat-$env:VERSION-windows-${{ matrix.arch }}"
+          $dir = "stage\CapyCut-$env:VERSION-windows-${{ matrix.arch }}"
           $unsigned = Get-ChildItem $dir -Recurse -File -Include *.exe, *.dll |
             Where-Object { (Get-AuthenticodeSignature $_.FullName).Status -ne "Valid" }
           foreach ($file in $unsigned) {
             & $signtool.FullName sign /sha1 $cert.Thumbprint /s My /fd SHA256 `
-              /tr http://timestamp.digicert.com /td SHA256 /d Concat $file.FullName
+              /tr http://timestamp.digicert.com /td SHA256 /d CapyCut $file.FullName
             if ($LASTEXITCODE -ne 0) { throw "signtool failed on $($file.Name)" }
           }
           Write-Host "Signed $(@($unsigned).Count) files."
@@ -1074,7 +1074,7 @@ jobs:
         shell: pwsh
         env:
           VERSION: ${{ steps.version.outputs.version }}
-        run: scripts/ci/smoke-windows.ps1 -Bundle "stage\Concat-$env:VERSION-windows-${{ matrix.arch }}"
+        run: scripts/ci/smoke-windows.ps1 -Bundle "stage\CapyCut-$env:VERSION-windows-${{ matrix.arch }}"
 
       # The same, then `--version` under Intel's emulator posing as an Ivy
       # Bridge (#313). A step of its own, after the plain smoke test: in
@@ -1102,7 +1102,7 @@ jobs:
           $sde = (Get-ChildItem sde -Recurse -Filter sde.exe | Select-Object -First 1).FullName
           if (-not $sde) { throw "sde.exe is not in the archive" }
           Write-Host "SDE at $sde"
-          scripts/ci/smoke-windows.ps1 -Bundle "stage\Concat-$env:VERSION-windows-x86_64" -Sde $sde
+          scripts/ci/smoke-windows.ps1 -Bundle "stage\CapyCut-$env:VERSION-windows-x86_64" -Sde $sde
 
       # Every x86_64 binary in the folder, disassembled and counted for
       # instructions an Ivy Bridge does not have, against what
@@ -1114,7 +1114,7 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.version }}
         # llvm-objdump from the LLVM installed above, on the path.
-        run: scripts/ci/isa-scan.sh "stage/Concat-${VERSION}-windows-${{ matrix.arch }}"
+        run: scripts/ci/isa-scan.sh "stage/CapyCut-${VERSION}-windows-${{ matrix.arch }}"
 
       # The installers, from the checked folder: Inno Setup's .exe and
       # WiX's .msi, each signed when the folder was.
@@ -1125,11 +1125,11 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           $ErrorActionPreference = "Stop"
-          $name = "Concat-$env:VERSION-windows-${{ matrix.arch }}"
+          $name = "CapyCut-$env:VERSION-windows-${{ matrix.arch }}"
           function Sign($file) {
             if (-not $env:SIGNING_THUMBPRINT) { return }
             & $env:SIGNTOOL sign /sha1 $env:SIGNING_THUMBPRINT /s My /fd SHA256 `
-              /tr http://timestamp.digicert.com /td SHA256 /d Concat $file
+              /tr http://timestamp.digicert.com /td SHA256 /d CapyCut $file
             if ($LASTEXITCODE -ne 0) { throw "signtool failed on $file" }
           }
           # The installer, from that folder: Inno Setup, which the x64
@@ -1168,6 +1168,6 @@ jobs:
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: Concat-${{ matrix.platform }}-${{ matrix.arch }}
+          name: CapyCut-${{ matrix.platform }}-${{ matrix.arch }}
           path: stage/*
           if-no-files-found: error

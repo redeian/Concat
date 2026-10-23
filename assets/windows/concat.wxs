@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Concat's Windows Installer package, the .msi beside the Inno Setup .exe.
+  CapyCut's Windows Installer package, the .msi beside the Inno Setup .exe.
 
   Built by build-app.yml with WiX from the staged folder the .exe is made
   of, so the two installers ship the same files. The .exe is the
@@ -18,27 +18,27 @@
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
   <!-- One upgrade code for the life of the product, so a newer .msi
        replaces an older one rather than sitting beside it. -->
-  <Package Name="Concat"
-           Manufacturer="Concat contributors"
+  <Package Name="CapyCut"
+           Manufacturer="CapyCut contributors"
            Version="$(var.Version)"
            UpgradeCode="6C4D5D8E-9B2A-4F3B-8E1C-5A7D2B9F0C11"
            Scope="perMachine"
            Language="1033">
-    <MajorUpgrade DowngradeErrorMessage="A newer version of Concat is already installed." />
+    <MajorUpgrade DowngradeErrorMessage="A newer version of CapyCut is already installed." />
     <MediaTemplate EmbedCab="yes" />
 
-    <Icon Id="concat.ico" SourceFile="$(var.Root)\assets\icons\concat.ico" />
-    <Property Id="ARPPRODUCTICON" Value="concat.ico" />
-    <Property Id="ARPURLINFOABOUT" Value="https://github.com/jub0t/Concat" />
+    <Icon Id="capycut.ico" SourceFile="$(var.Root)\assets\icons\capycut.ico" />
+    <Property Id="ARPPRODUCTICON" Value="capycut.ico" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/redeian/Concat" />
 
     <StandardDirectory Id="ProgramFiles64Folder">
-      <Directory Id="INSTALLFOLDER" Name="Concat" />
+      <Directory Id="INSTALLFOLDER" Name="CapyCut" />
     </StandardDirectory>
     <StandardDirectory Id="ProgramMenuFolder">
-      <Directory Id="ShortcutFolder" Name="Concat" />
+      <Directory Id="ShortcutFolder" Name="CapyCut" />
     </StandardDirectory>
 
-    <Feature Id="Main" Title="Concat" Level="1">
+    <Feature Id="Main" Title="CapyCut" Level="1">
       <ComponentGroupRef Id="Program" />
       <ComponentRef Id="StartMenu" />
     </Feature>
@@ -50,11 +50,11 @@
 
     <Component Id="StartMenu" Directory="ShortcutFolder" Guid="2F0B7C51-6E4D-4A1B-9C3E-8D5F1A2B3C44">
       <Shortcut Id="StartMenuShortcut"
-                Name="Concat"
+                Name="CapyCut"
                 Description="Video editor"
                 Target="[INSTALLFOLDER]concat.exe"
                 WorkingDirectory="INSTALLFOLDER"
-                Icon="concat.ico" />
+                Icon="capycut.ico" />
       <RemoveFolder Id="RemoveShortcutFolder" On="uninstall" />
       <RegistryValue Root="HKCU" Key="Software\Concat" Name="StartMenu" Type="integer" Value="1" KeyPath="yes" />
     </Component>

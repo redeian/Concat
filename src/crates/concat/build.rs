@@ -72,7 +72,7 @@ fn main() {
     // and without one they show Windows' generic program icon. Needs the
     // Windows SDK's rc.exe, which an MSVC toolchain has.
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
-        let icon = "../../../assets/icons/concat.ico";
+        let icon = "../../../assets/icons/capycut.ico";
         println!("cargo:rerun-if-changed={icon}");
         // The file's name and description as Windows shows them in its
         // properties, and as code signing checks them: "CapyCut" in every
