@@ -71,6 +71,7 @@ use crate::platform;
 use crate::prefs::Preferences;
 use crate::presets::{self, TextPreset};
 use crate::ui::*;
+use concat_host::updates;
 
 /// The monitor's output sizes, matching the picker's rows.
 pub const OUTPUTS: [(i32, i32); 6] = [
@@ -201,7 +202,8 @@ fn is_flat(frame: &concat_core::Frame) -> bool {
         return true;
     };
     let close = |pixel: &[u8]| {
-        pixel.iter()
+        pixel
+            .iter()
             .zip(first)
             .all(|(value, anchor)| value.abs_diff(*anchor) <= 2)
     };
@@ -896,6 +898,10 @@ pub struct Studio {
     grip_centre: (f64, f64),
     pub playhead: f32,
     pub playing: bool,
+    /// A release newer than this build, by its number, when the window has
+    /// asked GitHub and been told so. None leaves the gear without a dot and
+    /// the Version page saying nothing until someone presses Check.
+    pub update_available: Option<updates::Version>,
     transport: slint::Timer,
     /// The phone's lanes carrying on after a finger throws them, and the
     /// beat that moves them while they do; see `panes::glide`.
@@ -1872,7 +1878,10 @@ fn chain_rows_mixed(
     (rows, knobs)
 }
 
-fn chain_rows(chain: &[AppliedFilter], at: Option<f64>) -> (Vec<AppliedEntryData>, Vec<AppliedParamData>) {
+fn chain_rows(
+    chain: &[AppliedFilter],
+    at: Option<f64>,
+) -> (Vec<AppliedEntryData>, Vec<AppliedParamData>) {
     let catalogue = Catalogue::builtin();
     let mut rows = Vec::new();
     let mut knobs = Vec::new();
@@ -2414,6 +2423,7 @@ impl Studio {
             playhead: 0.0,
             // ~20px a second: a ten-second cut fits a pane at its default width.
             playing: false,
+            update_available: None,
             transport: slint::Timer::default(),
             coast: crate::panes::glide::Coast::default(),
             glide_beat: slint::Timer::default(),
@@ -9599,8 +9609,10 @@ impl Studio {
             match clips.split_first() {
                 Some((first, _)) => {
                     let at = place_in(first, self.playhead);
-                    let visual_chains: Vec<&[AppliedFilter]> =
-                        clips.iter().map(|clip| clip.video_effects.as_slice()).collect();
+                    let visual_chains: Vec<&[AppliedFilter]> = clips
+                        .iter()
+                        .map(|clip| clip.video_effects.as_slice())
+                        .collect();
                     let sound_chains: Vec<&[AppliedFilter]> =
                         clips.iter().map(|clip| clip.filters.as_slice()).collect();
                     let (visual, visual_params) = chain_rows_for(&visual_chains, Some(at));
@@ -11358,6 +11370,12 @@ impl Studio {
         editor.set_count_media(self.project().media.len() as i32);
         editor.set_count_tracks(self.timeline().tracks.len() as i32);
         editor.set_count_clips(self.timeline().clips.len() as i32);
+        editor.set_update_available(
+            self.update_available
+                .map(|version| version.to_string())
+                .unwrap_or_default()
+                .into(),
+        );
         app.set_project_sheet(self.project_sheet.data(self));
 
         let rows = self.menu();
@@ -12122,7 +12140,12 @@ impl Studio {
             };
             let footprint = self.footprint(clip);
             let (hw, hh) = footprint.half_bounds(self.output_size());
-            boxes.push((footprint.cx - hw, footprint.cy - hh, footprint.cx + hw, footprint.cy + hh));
+            boxes.push((
+                footprint.cx - hw,
+                footprint.cy - hh,
+                footprint.cx + hw,
+                footprint.cy + hh,
+            ));
         }
         if boxes.is_empty() {
             return (0.5, 0.5);
@@ -12132,6 +12155,38 @@ impl Studio {
         let right = boxes.iter().map(|b| b.2).fold(f64::NEG_INFINITY, f64::max);
         let bottom = boxes.iter().map(|b| b.3).fold(f64::NEG_INFINITY, f64::max);
         ((left + right) / 2.0, (top + bottom) / 2.0)
+    }
+
+    /// Asks GitHub for the release list when the window opens, at most once a
+    /// day, and remembers what it was told. Silent by design: no network, a
+    /// day already used up, or a build that is current all leave the window
+    /// exactly as it was. See Settings > Version for the switch.
+    pub fn check_updates_at_launch(&mut self) {
+        if self.prefs.update_check == Some(false) {
+            return;
+        }
+        const DAY: u64 = 24 * 60 * 60;
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|since| since.as_secs())
+            .unwrap_or(0);
+        if let Some(last) = self.prefs.update_checked_at
+            && now.saturating_sub(last) < DAY
+        {
+            return;
+        }
+        self.prefs.update_checked_at = Some(now);
+        self.prefs.save(&self.host.dirs);
+        spawn(updates::fetch_releases, |studio, _, _, result| {
+            let Ok(releases) = result else {
+                return;
+            };
+            let current = updates::Version::current();
+            if let updates::Standing::Behind(newer) = updates::standing(current, &releases) {
+                studio.update_available = Some(newer);
+                studio.notify(&tf("settings.updateReady", &[&newer.to_string()]), false);
+            }
+        });
     }
 
     /// The timeline's vertical density, stepped: as the sizes say, tight,
@@ -12581,8 +12636,10 @@ impl Studio {
             1 => self.prefs.camera.focus_x = value.clamp(0.0, 1.0),
             2 => self.prefs.camera.focus_y = value.clamp(0.0, 1.0),
             3 => {
-                self.prefs.camera.move_seconds =
-                    value.clamp(crate::camera::MIN_MOVE_SECONDS, crate::camera::MAX_MOVE_SECONDS)
+                self.prefs.camera.move_seconds = value.clamp(
+                    crate::camera::MIN_MOVE_SECONDS,
+                    crate::camera::MAX_MOVE_SECONDS,
+                )
             }
             _ => return,
         }
@@ -12598,8 +12655,8 @@ impl Studio {
         if !seconds.is_finite() {
             return;
         }
-        self.prefs.animation.seconds = seconds
-            .clamp(crate::animation::MIN_SECONDS, crate::animation::MAX_SECONDS);
+        self.prefs.animation.seconds =
+            seconds.clamp(crate::animation::MIN_SECONDS, crate::animation::MAX_SECONDS);
         self.prefs.save(&self.host.dirs);
     }
 

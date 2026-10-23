@@ -41,11 +41,15 @@ merged. Every member uses multi-factor authentication on GitHub.
 
 This program will not transfer any information to other networked systems
 unless specifically requested by the user or the person installing or operating
-it. Concat reaches the network only when you ask it to:
+it. Concat reaches the network to ask about itself and for the things you ask
+for, and nothing else:
 
 - **Settings › Version** asks GitHub for the list of releases when you open
   it or press **Check for updates**, and installing one downloads it from
-  GitHub.
+  GitHub. The window also asks once a day when it opens, so that a newer
+  release is known without pressing anything - that switch is on the same
+  page, and turning it off leaves the button as the only way to hear about
+  one.
 - **Downloading a model** (transcription, speech, cutout) fetches it from the
   source picked under **Downloads** in Settings › General, and tries the other
   sources listed there if that one fails.

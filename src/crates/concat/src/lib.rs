@@ -35,8 +35,8 @@ mod batch_volume;
 // CapyCut: one-click animation presets for titles, shapes and stickers.
 mod animation;
 // CapyCut: punching the camera in and out over a layer.
-mod camera;
 mod brand;
+mod camera;
 mod chips;
 mod dock;
 mod fonts;
@@ -292,6 +292,9 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
     }
     studio.reload_packages(false);
     studio.watch_packages();
+    // A newer release is worth knowing about without asking: one request a
+    // day, silent when there is no network, off when the switch is off.
+    studio.check_updates_at_launch();
     let dark = studio.prefs.dark.unwrap_or(true);
     app.global::<Theme>().set_dark(dark);
     // The accent is remembered by name and the names live on the Theme
@@ -1194,9 +1197,11 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
         keys.on_toggle_effect(on_lanes!(|state, entry: i32, key: SharedString| {
             state.toggle_effect_key(entry, key.as_str());
         }));
-        keys.on_step_effect(on_lanes!(|state, entry: i32, key: SharedString, delta: i32| {
-            state.step_effect_key(entry, key.as_str(), delta);
-        }));
+        keys.on_step_effect(on_lanes!(
+            |state, entry: i32, key: SharedString, delta: i32| {
+                state.step_effect_key(entry, key.as_str(), delta);
+            }
+        ));
     }
     // The background behind the main picture, and Fit and Fill: a global
     // of their own, for the Details panel, the Video panel and the phone.
@@ -1994,6 +1999,9 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
     }));
     app.on_settings_check_updates(on_window!(|state| {
         state.handle(Msg::Settings(SettingsMsg::CheckUpdates));
+    }));
+    app.on_settings_update_check_changed(on_window!(|state, on: bool| {
+        state.handle(Msg::Settings(SettingsMsg::UpdateCheckChanged(on)));
     }));
     app.on_settings_version_chosen(on_window!(|state, index: i32| {
         state.handle(Msg::Settings(SettingsMsg::VersionChosen(index)));

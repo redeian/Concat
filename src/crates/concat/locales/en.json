@@ -963,5 +963,8 @@
   "voices.styles": "Styles",
   "voices.stylesHint": "A style is a voice with effects on it. Pick one to write in it: the effects go on the speech clip, where you can change them.",
   "voices.voices": "Voices",
-  "voices.yours": "Your voices"
+  "voices.yours": "Your voices",
+  "settings.checkUpdatesOnLaunch": "Check for updates when Concat opens",
+  "settings.whatTheCheckSends": "One request to GitHub for the list of releases, at most once a day. Nothing about you, this project or this cut leaves the machine.",
+  "settings.updateReady": "Version {0} is out"
 }

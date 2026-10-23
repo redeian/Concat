@@ -80,6 +80,9 @@ component MenuLabel inherits Rectangle {
 
 component HeaderIconButton inherits Rectangle {
     in property <Glyph> glyph;
+    /// A release is out: a dot on the button's corner, the only thing on the
+    /// launch screen or the window that says so without being asked.
+    in property <bool> marked: false;
 
     callback clicked();
 
@@ -96,6 +99,20 @@ component HeaderIconButton inherits Rectangle {
         glyph: root.glyph;
         size: 14px;
         tint: touch.has-hover ? Theme.fg : Theme.fg-muted;
+    }
+
+    // A release is out. Small, in the corner, and the only mark the window
+    // makes without being asked for.
+    if root.marked: Rectangle {
+        x: parent.width - 7px;
+        y: 1px;
+        width: 6px;
+        height: 6px;
+        border-radius: 3px;
+        background: Theme.accent;
+        border-width: 1px;
+        border-color: root.background == Colors.transparent
+            ? Theme.page : Theme.field;
     }
 
     touch := TouchArea {
@@ -121,6 +138,8 @@ export component TitleBar inherits Rectangle {
     /// than its usual panel, so the launcher reads as one room and not as a
     /// dark window with a light lid. See the `launch-` ladder in theme/.
     in property <bool> deep;
+    /// A release is newer than this build: the gear wears a dot.
+    in property <bool> update-available;
 
     /// Draw the window buttons at the right: true wherever the platform's
     /// decorations were taken off, which is everywhere but macOS.
@@ -271,6 +290,7 @@ export component TitleBar inherits Rectangle {
             alignment: center;
             HeaderIconButton {
                 glyph: Glyph.settings;
+                marked: root.update-available;
                 clicked => { root.open-settings(); }
             }
         }

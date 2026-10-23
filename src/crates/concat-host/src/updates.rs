@@ -33,16 +33,22 @@ use std::sync::atomic::AtomicBool;
 use crate::dirs::AppDirs;
 use crate::models;
 
-/// The repository the releases are read from.
-pub const REPO: &str = "jub0t/Concat";
+/// The repository the releases are read from. CapyCraft's own, not the one it
+/// was forked from: an app that read the upstream's releases would offer to
+/// replace itself with the upstream's build, branding and all.
+pub const REPO: &str = "redeian/Concat";
 
 /// The first release with a Version page: the earliest one a person can
 /// come back from, so the earliest one offered.
 pub const FIRST_SWITCHABLE: Version = Version::new(0, 2, 5);
 
 /// GitHub's list of the repository's releases, newest first. A hundred
-/// covers years of releases at this pace.
-const RELEASES_URL: &str = "https://api.github.com/repos/jub0t/Concat/releases?per_page=100";
+/// covers years of releases at this pace. Built from [`REPO`] rather than
+/// written out, so the list and the releases cannot name different
+/// repositories.
+fn releases_url() -> String {
+    format!("https://api.github.com/repos/{REPO}/releases?per_page=100")
+}
 
 /// What a download that was stopped says.
 pub const CANCELLED: &str = "the download was cancelled";
@@ -173,7 +179,7 @@ fn github_message(value: &serde_json::Value) -> String {
 
 /// Asks GitHub for the releases; see [`releases_from_json`].
 pub fn fetch_releases() -> Result<Vec<Release>, String> {
-    releases_from_json(&get_text(RELEASES_URL)?)
+    releases_from_json(&get_text(&releases_url())?)
 }
 
 /// Where this build sits among the releases.

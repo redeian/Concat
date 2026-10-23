@@ -62,6 +62,9 @@ pub enum SettingsMsg {
     GpuChanged(bool),
     /// The magnetic timeline switch; the tray's button is the same fact.
     MagneticChanged(bool),
+    /// The Version page's switch: ask GitHub for the release list when the
+    /// window opens, at most once a day.
+    UpdateCheckChanged(bool),
     DownloadSourceChanged(i32),
     DownloadBaseEdited(String),
     ServerEnabledChanged(bool),
@@ -333,6 +336,16 @@ impl SettingsPane {
             SettingsMsg::MagneticChanged(on) => {
                 studio.prefs.magnetic = on;
                 studio.prefs.save(&studio.host.dirs);
+            }
+            SettingsMsg::UpdateCheckChanged(on) => {
+                studio.prefs.update_check = Some(on);
+                // Asking again now, rather than waiting out the day, is what
+                // a person who has just turned the switch on means.
+                studio.prefs.update_checked_at = None;
+                studio.prefs.save(&studio.host.dirs);
+                if on {
+                    studio.check_updates_at_launch();
+                }
             }
             SettingsMsg::DownloadSourceChanged(index) => {
                 let index = (index.max(0) as usize).min(SourcePreference::ALL.len() - 1);
@@ -626,81 +639,84 @@ impl SettingsPane {
 /// and once as the window opens, so an agent meant to drive this window does
 /// not need the user to visit the page first. `Err` is the sentence to show.
 pub fn start_server(studio: &mut Studio) -> Result<(), String> {
-        // Detached: the address is free again when this returns, and a
-        // call or an export the old server was in the middle of is
-        // cancelled and finished off the event loop, not waited for on it.
-        if let Some(server) = studio.host.server.take() {
-            server.stop_detached();
+    // Detached: the address is free again when this returns, and a
+    // call or an export the old server was in the middle of is
+    // cancelled and finished off the event loop, not waited for on it.
+    if let Some(server) = studio.host.server.take() {
+        server.stop_detached();
+    }
+    let exporter = studio.host.exporter.clone();
+    let open_projects = studio.host.open_projects.clone();
+    let dirs = studio.host.dirs.clone();
+    let prefs = &studio.prefs.server;
+    log::info!(
+        "automation: start_server enabled={} listen={:?} live={:?}",
+        prefs.enabled,
+        prefs.listen,
+        std::env::var_os("CONCAT_LIVE_EDIT")
+    );
+    // Live mode, as #337 asks for it and off unless asked: a caller may
+    // edit the project on screen when this process was started with
+    // CONCAT_LIVE_EDIT set. The switch on this page replaces the
+    // environment variable once it is wired.
+    let live = std::env::var_os("CONCAT_LIVE_EDIT").is_some_and(|value| value != "0");
+    if !prefs.enabled {
+        return Ok(());
+    }
+    // A token being typed is weak until it is long enough; the switch
+    // stays on and the server waits for it, rather than the switch
+    // flipping off at the first keystroke.
+    if !prefs.token.is_empty() && concat_server::check_token(&prefs.token).is_err() {
+        return Err(tf(
+            "settings.tokenTooWeak",
+            &[&concat_server::MIN_TOKEN_CHARS],
+        ));
+    }
+    let started = prefs
+        .listen
+        .trim()
+        .parse::<std::net::SocketAddr>()
+        .map_err(|_| tf("settings.notAnAddress", &[&prefs.listen]))
+        .and_then(|address| {
+            let config = concat_server::Config {
+                json: Some(address),
+                token: Some(prefs.token.clone()).filter(|token| !token.is_empty()),
+                // Where `concat --mcp`, started by an agent, finds this
+                // server rather than opening projects behind its back.
+                discovery: Some(concat_server::discovery::path_in(&dirs.config)),
+                ..concat_server::Config::default()
+            };
+            // The window's export slot and its register of open
+            // projects, so one export at a time holds across the two
+            // and a caller never edits the project on screen.
+            concat_server::Server::start(config, move |events| {
+                let mut api = concat_api::Api::new(events)?;
+                api.share_exporter(exporter);
+                api.share_open_projects(open_projects);
+                // Live mode, off unless asked for: with it on, a caller
+                // that names the project on screen edits it there, and
+                // the window draws the change as it lands. The switch
+                // on this page is the follow-up; this is the gate that
+                // keeps today's behaviour while it is unset.
+                if live {
+                    api.share_window(std::sync::Arc::new(crate::live::Window));
+                }
+                Ok(api)
+            })
+        });
+    match started {
+        Ok(server) => {
+            studio.host.server = Some(server);
+            Ok(())
         }
-        let exporter = studio.host.exporter.clone();
-        let open_projects = studio.host.open_projects.clone();
-        let dirs = studio.host.dirs.clone();
-        let prefs = &studio.prefs.server;
-        log::info!(
-            "automation: start_server enabled={} listen={:?} live={:?}",
-            prefs.enabled,
-            prefs.listen,
-            std::env::var_os("CONCAT_LIVE_EDIT")
-        );
-        // Live mode, as #337 asks for it and off unless asked: a caller may
-        // edit the project on screen when this process was started with
-        // CONCAT_LIVE_EDIT set. The switch on this page replaces the
-        // environment variable once it is wired.
-        let live = std::env::var_os("CONCAT_LIVE_EDIT").is_some_and(|value| value != "0");
-        if !prefs.enabled {
-            return Ok(());
-        }
-        // A token being typed is weak until it is long enough; the switch
-        // stays on and the server waits for it, rather than the switch
-        // flipping off at the first keystroke.
-        if !prefs.token.is_empty() && concat_server::check_token(&prefs.token).is_err() {
-            return Err(tf("settings.tokenTooWeak", &[&concat_server::MIN_TOKEN_CHARS]));
-        }
-        let started = prefs
-            .listen
-            .trim()
-            .parse::<std::net::SocketAddr>()
-            .map_err(|_| tf("settings.notAnAddress", &[&prefs.listen]))
-            .and_then(|address| {
-                let config = concat_server::Config {
-                    json: Some(address),
-                    token: Some(prefs.token.clone()).filter(|token| !token.is_empty()),
-                    // Where `concat --mcp`, started by an agent, finds this
-                    // server rather than opening projects behind its back.
-                    discovery: Some(concat_server::discovery::path_in(&dirs.config)),
-                    ..concat_server::Config::default()
-                };
-                // The window's export slot and its register of open
-                // projects, so one export at a time holds across the two
-                // and a caller never edits the project on screen.
-                concat_server::Server::start(config, move |events| {
-                    let mut api = concat_api::Api::new(events)?;
-                    api.share_exporter(exporter);
-                    api.share_open_projects(open_projects);
-                    // Live mode, off unless asked for: with it on, a caller
-                    // that names the project on screen edits it there, and
-                    // the window draws the change as it lands. The switch
-                    // on this page is the follow-up; this is the gate that
-                    // keeps today's behaviour while it is unset.
-                    if live {
-                        api.share_window(std::sync::Arc::new(crate::live::Window));
-                    }
-                    Ok(api)
-                })
-            });
-        match started {
-            Ok(server) => {
-                studio.host.server = Some(server);
-                Ok(())
-            }
-            Err(error) => {
-                studio.prefs.server.enabled = false;
-                studio.prefs.save(&studio.host.dirs);
-                studio.notify(&error, true);
-                Err(error)
-            }
+        Err(error) => {
+            studio.prefs.server.enabled = false;
+            studio.prefs.save(&studio.host.dirs);
+            studio.notify(&error, true);
+            Err(error)
         }
     }
+}
 
 impl SettingsPane {
     /// What the Automation page says under the switch.
@@ -724,6 +740,16 @@ impl SettingsPane {
     /// The two model lists, from what is on disk. A download in flight
     /// keeps its progress across the rebuild.
     fn refresh(&mut self, studio: &mut Studio) {
+        // A release found when the window opened is worth showing without
+        // pressing Check for updates again: the page already knows.
+        if !self.checked
+            && let Some(newer) = studio.update_available
+        {
+            self.update_status = tf(
+                "settings.updateAvailable",
+                &[&newer, &updates::Version::current()],
+            );
+        }
         let dirs = &studio.host.dirs;
         let downloading: HashMap<String, (Option<f32>, bool)> = self
             .transcribers
@@ -918,6 +944,7 @@ impl SettingsPane {
             },
             version: env!("CARGO_PKG_VERSION").into(),
             update_status: self.update_status.as_str().into(),
+            update_check: studio.prefs.update_check != Some(false),
             checking: self.checking,
             version_choice: self.version_choice as i32,
             installing: self.install.is_some(),

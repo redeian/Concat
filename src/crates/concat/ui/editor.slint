@@ -490,6 +490,9 @@ export global Editor {
     in-out property <int> count-media;
     in-out property <int> count-tracks;
     in-out property <int> count-clips;
+    /// A release newer than this build, by its number, or empty: the dot on
+    /// the gear, and what the Version page already knows before it is asked.
+    in-out property <string> update-available;
     /// The panel's Modify button: open the project sheet.
     callback modify-project();
 

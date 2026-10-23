@@ -139,6 +139,15 @@ pub struct Preferences {
     /// it is put. Off by default: a click past the last clip lands there, so
     /// a clip can be dropped at the playhead beyond everything else.
     pub playhead_stops_at_end: bool,
+    /// Whether the window asks GitHub for the release list when it opens, at
+    /// most once a day. On unless turned off in Settings › Version: a build
+    /// that is behind is worth knowing about, and the request is one GET to
+    /// the releases API - no identifier, nothing about the person, the
+    /// project or the cut. `None` is on.
+    pub update_check: Option<bool>,
+    /// When the releases were last asked for, as whole seconds since the
+    /// Unix epoch: what keeps the check to once a day. Absent asks now.
+    pub update_checked_at: Option<u64>,
     /// Proxies: a file larger than HD gets a smaller copy written in the
     /// background, and playback at Half and Quarter reads that copy. Off
     /// by default, as in CapCut: a proxy is a full re-encode of every large

@@ -88,7 +88,7 @@ Concat is in **beta**: it works, and it still has edges. [Say so](https://github
 
 **System requirements** and the optional model sizes are on [the website](https://concatenate.pages.dev/guides/system-requirements).
 
-**[Code signing policy](CODE_SIGNING.md)**: why the Windows builds are not signed yet, and what Concat sends over the network (nothing you did not ask for).
+**[Code signing policy](CODE_SIGNING.md)**: why the Windows builds are not signed yet, and what Concat sends over the network (the release list, once a day, and nothing about you).
 
 ## Build from source
 

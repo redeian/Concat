@@ -103,6 +103,8 @@ export struct SettingsData {
     /// what the Version page says under the version: looking, up to date,
     /// a newer release out, or why it could not look
     update-status: string,
+    /// whether the window asks GitHub for the release list when it opens
+    update-check: bool,
     checking: bool,
     /// which of the sheet's `versions` the dropdown shows
     version-choice: int,
@@ -628,6 +630,8 @@ export component SettingsDialog inherits Modal {
     callback server-token-generated();
     /// the Version page: look for the releases, pick one, put it in place
     callback check-updates();
+    /// The Version page's switch: ask GitHub when the window opens.
+    callback update-check-changed(on: bool);
     callback version-chosen(index: int);
     callback install-version();
     callback install-cancel();
@@ -1470,6 +1474,20 @@ export component SettingsDialog inherits Modal {
                                 enabled: !root.data.checking;
                                 clicked => { root.check-updates(); }
                             }
+                        }
+
+                        // On, the window asks GitHub for the release list
+                        // once a day by itself, and the gear wears a dot when
+                        // one is out. Off, the button above is the only way
+                        // to hear about a release.
+                        DialogSection {
+                            ruled: false;
+                            title: I18n.t("settings.checkUpdatesOnLaunch");
+                            hint: I18n.t("settings.whatTheCheckSends");
+                            switchable: true;
+                            on: root.data.update-check;
+                            open: false;
+                            switched(on) => { root.update-check-changed(on); }
                         }
                     }
                 }
