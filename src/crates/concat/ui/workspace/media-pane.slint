@@ -17,6 +17,16 @@ import { Sounds, SoundList, VoiceList } from "audio-page.slint";
 // CapyCut: badges and emoji, under the figures on the Stickers page.
 import { StickerGrid } from "sticker-shelf.slint";
 
+// One template in the library, as the Templates page lists it. The detail
+// line is built in Rust - "1920 x 1080, 24 fps, 3 slots" - because Slint has
+// no arithmetic to do it with and a translator cannot put the numbers in the
+// right places from the outside.
+export struct TemplateRowData {
+    path: string,
+    name: string,
+    detail: string,
+}
+
 export { SourcePreview }
 
 // The library pane: a strip of pages across the top, then a narrow category
@@ -1815,6 +1825,8 @@ export component MediaPane inherits Rectangle {
     in property <[TextPresetData]> presets;
     /// The looks for other writing, on the Languages shelf beside Styles.
     in property <[TextPresetData]> language-presets;
+    /// The user's templates, newest name order; see concat-host's templates.
+    in property <[TemplateRowData]> templates;
     /// The effect catalogue's shelves, as Rust narrows them by the
     /// `Library` view: what the Effects, Filters and Transitions pages show.
     in property <[CatalogueEntryData]> catalogue-effects;
@@ -1845,6 +1857,10 @@ export component MediaPane inherits Rectangle {
     callback apply-audio(effect-id: string);
     /// Templates page: open the save-as-template flow for this project.
     callback save-template();
+    /// A saved template, dropped into a new project with its slots filled.
+    callback use-template(path: string);
+    /// A saved template, gone from the library.
+    callback delete-template(path: string);
     /// Adjustments page: bring in `.cube` tables as looks of the user's own.
     callback import-lut();
     /// Adjustments page: lay an adjustment layer at the playhead, called
@@ -2903,7 +2919,72 @@ export component MediaPane inherits Rectangle {
                     }
                 }
 
-                if root.tab == 6: Empty {
+                // Templates the user has saved, one row each: the name, what
+                // the template is for, and the two things that can be done
+                // with it. A row is the button that uses it, because using one
+                // is what the page is for; the x takes it out of the library.
+                if root.tab == 6 && root.templates.length > 0: VerticalLayout {
+                    padding: 8px;
+                    spacing: 6px;
+
+                    for template in root.templates: Rectangle {
+                        height: 52px;
+                        border-radius: Theme.r-sm;
+                        background: row-touch.has-hover ? Theme.field : Theme.lane;
+                        border-width: 1px;
+                        border-color: Theme.line;
+
+                        VerticalLayout {
+                            x: 10px;
+                            y: 8px;
+                            width: parent.width - 44px;
+                            spacing: 2px;
+
+                            Text {
+                                text: template.name;
+                                color: Theme.fg;
+                                font-size: Theme.fs;
+                                overflow: elide;
+                            }
+
+                            Text {
+                                text: template.detail;
+                                color: Theme.fg-muted;
+                                font-size: Theme.fs-sm;
+                                overflow: elide;
+                            }
+                        }
+
+                        row-touch := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { root.use-template(template.path); }
+                        }
+
+                        Rectangle {
+                            x: parent.width - 30px;
+                            y: 6px;
+                            width: 22px;
+                            height: 22px;
+                            border-radius: Theme.r-xs;
+                            background: drop-touch.has-hover ? Theme.field : transparent;
+
+                            Text {
+                                text: "×";
+                                color: Theme.fg-muted;
+                                font-size: Theme.fs;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+
+                            drop-touch := TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => { root.delete-template(template.path); }
+                            }
+                        }
+                    }
+                }
+
+                if root.tab == 6 && root.templates.length == 0: Empty {
                     glyph: Glyph.slot;
                     text: I18n.t("mediaPane.noTemplatesYetMark");
                 }

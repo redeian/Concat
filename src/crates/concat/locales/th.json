@@ -966,5 +966,12 @@
   "voices.yours": "เสียงพูดของคุณ",
   "settings.checkUpdatesOnLaunch": "ตรวจหาอัปเดตตอนเปิด Concat",
   "settings.whatTheCheckSends": "ยิงคำขอไปที่ GitHub หนึ่งครั้งเพื่อขอลิสต์รุ่นใหม่ วันละครั้งเท่านั้น ไม่มีข้อมูลของคุณ โปรเจกต์ หรือไฟล์ตัดต่อออกจากเครื่องเลย",
-  "settings.updateReady": "มีรุ่น {0} แล้ว"
+  "settings.updateReady": "มีรุ่น {0} แล้ว",
+  "mediaPane.templateDetail": "{0} × {1} · {2} fps · {3}",
+  "mediaPane.templateSlots": "{0} ช่อง",
+  "mediaPane.templateNoSlots": "ไม่มีช่อง",
+  "mediaPane.templateGone": "template นั้นไม่อยู่ในคลังแล้ว",
+  "mediaPane.templateNeedsMedia": "template นี้มี {0} ช่องที่ต้องเติมสื่อของคุณ (ขั้นตอนเติมจะทำต่อไป)",
+  "mediaPane.templateDeleted": "ลบ template แล้ว",
+  "shortcuts.laneDensity": "ความสูงของเลน"
 }

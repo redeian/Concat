@@ -1,0 +1,27 @@
+# The reveal multiplies a title's alpha, per word, by how far Progress has
+# passed that word's order. On a canvas with no per-word map every pixel
+# carries order 0, so the whole picture is revealed at any progress above the
+# softness ramp - the identity the default and maximum probes pin - and hidden
+# at Progress 0, which is the minimum.
+
+[[probe]]
+name = "default, a grey"
+input = [0.18, 0.18, 0.18, 1]
+expect = [0.18, 0.18, 0.18, 1]
+
+[[probe]]
+name = "default, half transparent"
+input = [0.5, 0.2, 0.1, 0.5]
+expect = [0.5, 0.2, 0.1, 0.5]
+
+[[probe]]
+name = "minimum, nothing revealed"
+at = "min"
+input = [0.5, 0.2, 0.1, 0.5]
+expect = [0.5, 0.2, 0.1, 0.0]
+
+[[probe]]
+name = "maximum, a highlight past white"
+at = "max"
+input = [4.0, 1.0, 0.05, 1]
+expect = [4.0, 1.0, 0.05, 1]

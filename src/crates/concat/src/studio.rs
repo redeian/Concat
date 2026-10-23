@@ -902,6 +902,9 @@ pub struct Studio {
     /// asked GitHub and been told so. None leaves the gear without a dot and
     /// the Version page saying nothing until someone presses Check.
     pub update_available: Option<updates::Version>,
+    /// The templates in the library on disk, read at launch and after a save
+    /// or a delete; what the Templates page lists.
+    pub templates: Vec<templates::TemplateInfo>,
     transport: slint::Timer,
     /// The phone's lanes carrying on after a finger throws them, and the
     /// beat that moves them while they do; see `panes::glide`.
@@ -2424,6 +2427,7 @@ impl Studio {
             // ~20px a second: a ten-second cut fits a pane at its default width.
             playing: false,
             update_available: None,
+            templates: Vec::new(),
             transport: slint::Timer::default(),
             coast: crate::panes::glide::Coast::default(),
             glide_beat: slint::Timer::default(),
@@ -9200,6 +9204,67 @@ impl Studio {
         self.notify(&tf("studio.importedLutsFindThem", &[&imported]), false);
     }
 
+    /// Reads the library from disk. A folder that does not parse is skipped
+    /// by `templates::list`, so one broken template cannot empty the page.
+    pub fn refresh_templates(&mut self) {
+        self.templates = templates::list(&self.host.dirs.config);
+    }
+
+    /// A template, made into a project of this machine's own. A template whose
+    /// slots are all filled elsewhere - the ones with none at all - opens on
+    /// the spot; one that wants media says how many, because filling them is
+    /// the fill flow's job and not this call's.
+    pub fn use_template(&mut self, path: &str) {
+        let Some(info) = self
+            .templates
+            .iter()
+            .find(|item| item.path == path)
+            .cloned()
+        else {
+            self.notify(&t("mediaPane.templateGone"), true);
+            return;
+        };
+        if !info.slots.is_empty() {
+            self.notify(
+                &tf("mediaPane.templateNeedsMedia", &[&info.slots.len()]),
+                true,
+            );
+            return;
+        }
+        let location = self
+            .prefs
+            .last_project_location
+            .clone()
+            .or_else(|| {
+                std::env::var_os("HOME").map(|home| {
+                    std::path::PathBuf::from(home)
+                        .to_string_lossy()
+                        .into_owned()
+                })
+            })
+            .unwrap_or_else(|| ".".to_owned());
+        match templates::instantiate(path, &location, &info.name, Vec::new()) {
+            Ok(project) => {
+                if let Err(error) = self.open_project(project) {
+                    self.notify(&error, true);
+                }
+            }
+            Err(error) => self.notify(&error, true),
+        }
+    }
+
+    /// Takes a template out of the library. The files go; the window's list is
+    /// read again so the row that asked for it is gone.
+    pub fn delete_template(&mut self, path: &str) {
+        match templates::delete(&self.host.dirs.config, path) {
+            Ok(()) => {
+                self.refresh_templates();
+                self.notify(&t("mediaPane.templateDeleted"), false);
+            }
+            Err(error) => self.notify(&error, true),
+        }
+    }
+
     pub fn save_template(&mut self) {
         let Some(session) = self.session.as_ref() else {
             return;
@@ -9212,7 +9277,10 @@ impl Studio {
         spawn(
             move || templates::save(&config, &document, &settings, &path, &name),
             |studio, _, _, result| match result {
-                Ok(info) => studio.notify(&tf("studio.savedTemplate", &[&info.name]), false),
+                Ok(info) => {
+                    studio.refresh_templates();
+                    studio.notify(&tf("studio.savedTemplate", &[&info.name]), false);
+                }
                 Err(error) => studio.notify(&error, true),
             },
         );
@@ -11370,6 +11438,31 @@ impl Studio {
         editor.set_count_media(self.project().media.len() as i32);
         editor.set_count_tracks(self.timeline().tracks.len() as i32);
         editor.set_count_clips(self.timeline().clips.len() as i32);
+        let template_rows: Vec<crate::ui::TemplateRowData> = self
+            .templates
+            .iter()
+            .map(|template| {
+                let slots = if template.slots.is_empty() {
+                    t("mediaPane.templateNoSlots")
+                } else {
+                    tf("mediaPane.templateSlots", &[&template.slots.len()])
+                };
+                let fps = format!(
+                    "{:.0}",
+                    template.rate_num as f64 / template.rate_den.max(1) as f64
+                );
+                crate::ui::TemplateRowData {
+                    path: template.path.as_str().into(),
+                    name: template.name.as_str().into(),
+                    detail: tf(
+                        "mediaPane.templateDetail",
+                        &[&template.width, &template.height, &fps, &slots],
+                    )
+                    .into(),
+                }
+            })
+            .collect();
+        editor.set_templates(ModelRc::from(Rc::new(VecModel::from(template_rows))));
         editor.set_update_available(
             self.update_available
                 .map(|version| version.to_string())

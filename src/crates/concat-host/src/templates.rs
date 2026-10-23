@@ -93,10 +93,47 @@ pub fn save(
     project_path: &str,
     name: &str,
 ) -> Result<TemplateInfo, String> {
-    let root = templates_dir(config).join(projects::folder_name(name));
+    let library = templates_dir(config);
+    std::fs::create_dir_all(&library)
+        .map_err(|error| format!("could not create {}: {error}", library.display()))?;
+    let root = library.join(projects::folder_name(name));
     if root.join(MANIFEST).exists() {
         return Err(format!("a template named {name:?} already exists"));
     }
+
+    // Packed beside the library and moved in whole. A save that stops
+    // halfway - a media file that has gone missing since it was placed, a
+    // disk that fills - used to leave a folder with `assets/` in it, no
+    // manifest, and nothing on screen to say so. A half-made template is not
+    // a template, and it must not be one that the next save trips over.
+    let staging = library.join(format!(".saving-{}", projects::folder_name(name)));
+    let _ = std::fs::remove_dir_all(&staging);
+    if let Err(error) = pack_into(&staging, document, settings, project_path, name) {
+        let _ = std::fs::remove_dir_all(&staging);
+        return Err(error);
+    }
+    // What a stopped run left behind has no manifest, so it is in the way of
+    // the move rather than something to keep.
+    if root.exists() && !root.join(MANIFEST).exists() {
+        let _ = std::fs::remove_dir_all(&root);
+    }
+    if let Err(error) = std::fs::rename(&staging, &root) {
+        let _ = std::fs::remove_dir_all(&staging);
+        return Err(format!("could not put the template in place: {error}"));
+    }
+    read_info(&root)
+}
+
+/// Packs the project into `root`, which does not exist yet: the assets, the
+/// manifest and the poster. Split out so that a failure anywhere in it can
+/// take the whole half-made folder with it.
+fn pack_into(
+    root: &Path,
+    document: &Value,
+    settings: &DocumentSettings,
+    project_path: &str,
+    name: &str,
+) -> Result<(), String> {
     let assets = root.join(ASSETS);
     std::fs::create_dir_all(&assets)
         .map_err(|error| format!("could not create {}: {error}", assets.display()))?;
@@ -135,8 +172,7 @@ pub fn save(
     if let Ok(bytes) = media::poster_frame(project_path) {
         let _ = std::fs::write(root.join(POSTER), bytes);
     }
-
-    read_info(&root)
+    Ok(())
 }
 
 /// Copies one source file into `assets/` and returns its bundle-relative

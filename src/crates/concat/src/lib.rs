@@ -295,6 +295,8 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
     // A newer release is worth knowing about without asking: one request a
     // day, silent when there is no network, off when the switch is off.
     studio.check_updates_at_launch();
+    // What the Templates page lists, read once instead of on every paint.
+    studio.refresh_templates();
     let dark = studio.prefs.dark.unwrap_or(true);
     app.global::<Theme>().set_dark(dark);
     // The accent is remembered by name and the names live on the Theme
@@ -929,6 +931,12 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
     }));
     editor.on_library_save_template(on_window!(|state| {
         state.save_template();
+    }));
+    editor.on_library_use_template(on_window!(|state, path: SharedString| {
+        state.use_template(&path);
+    }));
+    editor.on_library_delete_template(on_window!(|state, path: SharedString| {
+        state.delete_template(&path);
     }));
     // Nothing borrowed: the dialog is asked on a turn of its own, and the
     // files it answers with are imported there; see `host::after_dialog`.

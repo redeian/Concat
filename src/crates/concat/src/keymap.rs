@@ -198,6 +198,7 @@ pub fn name(id: &str) -> String {
         "undo" => i18n::t("studio.undo"),
         "redo" => i18n::t("studio.redo"),
         "select-all" => i18n::t("shortcuts.selectAll"),
+        "lane-density" => i18n::t("shortcuts.laneDensity"),
         "copy" => i18n::t("common.copy"),
         "paste" => i18n::t("studio.paste"),
         "duplicate" => i18n::t("studio.duplicate"),

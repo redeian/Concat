@@ -620,14 +620,7 @@ mod tests {
     /// notes are this build's tag.
     #[test]
     fn every_link_has_an_address() {
-        for name in [
-            "guides",
-            "first-edit",
-            "report",
-            "github",
-            "discord",
-            "release-notes",
-        ] {
+        for name in ["report", "github", "release-notes"] {
             assert!(
                 link(name).is_some_and(|url| url.starts_with("https://")),
                 "{name}"
@@ -638,6 +631,12 @@ mod tests {
             format!("{REPOSITORY}/releases/tag/v{}", env!("CARGO_PKG_VERSION"))
         );
         assert_eq!(link("nowhere"), None);
+        // A fork's guides, first-edit and Discord are upstream's community,
+        // not this build's: the screen still draws them and the table says
+        // nothing, which is the point.
+        for name in ["guides", "first-edit", "discord"] {
+            assert_eq!(link(name), None, "{name} should have no address here");
+        }
     }
 
     /// Only a name the sheet made up is replaced; a typed one is kept.

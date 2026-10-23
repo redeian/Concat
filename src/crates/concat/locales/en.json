@@ -966,5 +966,12 @@
   "voices.yours": "Your voices",
   "settings.checkUpdatesOnLaunch": "Check for updates when Concat opens",
   "settings.whatTheCheckSends": "One request to GitHub for the list of releases, at most once a day. Nothing about you, this project or this cut leaves the machine.",
-  "settings.updateReady": "Version {0} is out"
+  "settings.updateReady": "Version {0} is out",
+  "mediaPane.templateDetail": "{0} × {1} · {2} fps · {3}",
+  "mediaPane.templateSlots": "{0} slots",
+  "mediaPane.templateNoSlots": "no slots",
+  "mediaPane.templateGone": "that template is no longer in the library",
+  "mediaPane.templateNeedsMedia": "This template has {0} slot(s) to fill with your own media; that flow comes next.",
+  "mediaPane.templateDeleted": "Template deleted",
+  "shortcuts.laneDensity": "Lane height"
 }

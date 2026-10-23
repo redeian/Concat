@@ -856,7 +856,7 @@ mod tests {
         }
         assert_eq!(
             manifest_url("v0.2.6"),
-            "https://github.com/jub0t/Concat/releases/download/v0.2.6/manifest.json"
+            format!("https://github.com/{REPO}/releases/download/v0.2.6/manifest.json")
         );
     }
 
