@@ -31,6 +31,14 @@ on:
       tag:
         description: An existing tag to build and publish, e.g. v0.3.0
         required: true
+      # The phones are built for every tag, and skipped when a release is
+      # about the desk: an Android .apk and an iOS .ipa are the two slowest
+      # jobs here and neither is on the way to a Windows installer. Absent -
+      # which is what a tag push gives - means build them, as before.
+      skip-phones:
+        description: Leave Android and iOS out of this release
+        type: boolean
+        default: "false"
 
 concurrency:
   group: release-${{ github.ref }}
@@ -106,6 +114,7 @@ jobs:
   # run; a pull request's build of mobile.yml never gets it.
   phones:
     needs: [check, engine]
+    if: ${{ inputs.skip-phones != true }}
     uses: ./.github/workflows/mobile.yml
     with:
       ref: ${{ needs.check.outputs.tag }}
@@ -115,6 +124,11 @@ jobs:
   publish:
     name: Publish release
     needs: [check, build, phones]
+    # A release with the phones left out is still a release: publish runs
+    # when the build passed and the phones either passed or were not asked
+    # for. Without this a skipped job would take the draft down with it.
+    if: ${{ !cancelled() && needs.build.result == 'success'
+      && (needs.phones.result == 'success' || needs.phones.result == 'skipped') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
