@@ -541,8 +541,10 @@ jobs:
       # build goes there, and a red run explains itself to anyone.
       - name: Build
         # An Intel Mac runner is the slow one: its release build ran past
-        # sixty minutes in v0.2.7-rc.1.
-        timeout-minutes: ${{ matrix.platform == 'macos' && matrix.arch == 'x86_64' && 100 || 60 }}
+        # sixty minutes in v0.2.7-rc.1. Every target gets the long limit on
+        # this fork: a cache eviction turns any of them into a from-scratch
+        # build, and a fork that loses the cache also loses the hour.
+        timeout-minutes: 100
         shell: bash
         working-directory: src
         run: |

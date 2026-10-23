@@ -20,9 +20,9 @@ package() {
   install -d "$pkgdir/usr/bin"
   printf '#!/bin/sh\nexec /opt/concat/concat "$@"\n' > "$pkgdir/usr/bin/concat"
   chmod 755 "$pkgdir/usr/bin/concat"
-  install -Dm644 "$stage/concat.desktop" "$pkgdir/usr/share/applications/concat.desktop"
-  sed -i 's|^Exec=concat|Exec=/opt/concat/concat %U|' "$pkgdir/usr/share/applications/concat.desktop"
-  install -Dm644 "$stage/concat.png" "$pkgdir/usr/share/icons/hicolor/256x256/apps/concat.png"
+  install -Dm644 "$stage/capycut.desktop" "$pkgdir/usr/share/applications/capycut.desktop"
+  sed -i 's|^Exec=concat|Exec=/opt/concat/concat %U|' "$pkgdir/usr/share/applications/capycut.desktop"
+  install -Dm644 "$stage/capycut.png" "$pkgdir/usr/share/icons/hicolor/256x256/apps/capycut.png"
 
   install -Dm644 "$stage/LICENSE" "$pkgdir/usr/share/licenses/concat/LICENSE"
   install -Dm644 "$stage/THIRD_PARTY_NOTICES.md" "$pkgdir/usr/share/licenses/concat/THIRD_PARTY_NOTICES.md"

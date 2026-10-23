@@ -37,10 +37,10 @@ contents:
     dst: /usr/bin/concat
     file_info:
       mode: 0755
-  - src: pkg/concat.desktop
-    dst: /usr/share/applications/concat.desktop
-  - src: concat.png
-    dst: /usr/share/icons/hicolor/256x256/apps/concat.png
+  - src: pkg/capycut.desktop
+    dst: /usr/share/applications/capycut.desktop
+  - src: capycut.png
+    dst: /usr/share/icons/hicolor/256x256/apps/capycut.png
   - src: LICENSE
     dst: /usr/share/doc/concat/LICENSE
   - src: THIRD_PARTY_NOTICES.md
