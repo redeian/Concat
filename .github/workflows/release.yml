@@ -39,6 +39,13 @@ on:
         description: Leave Android and iOS out of this release
         type: boolean
         default: "false"
+      # The suite, on every platform, before anything is built. Kept as an
+      # input for the day a platform's tests are known-red: a tag push still
+      # runs them, and a run that leaves them out says so in its notes.
+      skip-tests:
+        description: Build without waiting for the test suite
+        type: boolean
+        default: "false"
 
 concurrency:
   group: release-${{ github.ref }}
@@ -96,6 +103,7 @@ jobs:
   engine:
     name: CI
     needs: check
+    if: ${{ inputs.skip-tests != true }}
     uses: ./.github/workflows/ci.yml
     with:
       ref: ${{ needs.check.outputs.tag }}
@@ -105,6 +113,9 @@ jobs:
   # 0.2.6 shipped that way, 35 commits past the tag it was named for.
   build:
     needs: [check, engine]
+    # A suite that was not asked for is not a suite that failed.
+    if: ${{ !cancelled() && needs.check.result == 'success'
+      && (needs.engine.result == 'success' || needs.engine.result == 'skipped') }}
     uses: ./.github/workflows/build-app.yml
     with:
       ref: ${{ needs.check.outputs.tag }}
