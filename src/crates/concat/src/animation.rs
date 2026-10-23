@@ -132,8 +132,8 @@ impl Preset {
         Preset::Breathe,
     ];
 
-    /// The presets that have an entrance and an exit, in the order the panel
-    /// lists them.
+    /// The panel's enter/exit group, in the order it lists them.
+    #[allow(dead_code)] // The panel's own grouping; only the tests read it yet.
     pub const ENTER_EXIT: [Preset; 9] = [
         Preset::ElasticPop,
         Preset::Fade,
@@ -147,15 +147,11 @@ impl Preset {
     ];
 
     /// The presets that run for as long as the clip is on screen.
-    pub const DURING: [Preset; 4] = [
-        Preset::Pulse,
-        Preset::Float,
-        Preset::Shake,
-        Preset::Breathe,
-    ];
+    pub const DURING: [Preset; 4] = [Preset::Pulse, Preset::Float, Preset::Shake, Preset::Breathe];
 
     /// The index the inspector's buttons send. Global across both lists, so a
     /// button in either group names its preset unambiguously.
+    #[allow(dead_code)] // The inverse of from_index(); only the tests call it yet.
     pub fn index(self) -> i32 {
         Preset::ALL
             .iter()
@@ -186,6 +182,7 @@ impl Side {
     }
 
     /// The index the panel's buttons send.
+    #[allow(dead_code)] // The inverse of from_index(); only the tests call it yet.
     pub fn index(self) -> i32 {
         match self {
             Side::Enter => 0,
@@ -622,7 +619,10 @@ mod tests {
             .into_iter()
             .filter_map(|command| match command {
                 Command::SetClipKey {
-                    property, at, value, ..
+                    property,
+                    at,
+                    value,
+                    ..
                 } => Some((property, at, value)),
                 _ => None,
             })
@@ -647,6 +647,7 @@ mod tests {
         written(commands(&clip(), preset, Side::Enter, DEFAULT_SECONDS))
     }
 
+    #[allow(dead_code)] // The exit-side sibling of enter(); the exit tests are not written yet.
     fn exit(preset: Preset) -> Vec<(KeyProperty, f64, f64)> {
         written(commands(&clip(), preset, Side::Exit, DEFAULT_SECONDS))
     }
@@ -696,18 +697,27 @@ mod tests {
         let longer = written(commands(&clip(), Preset::ElasticPop, Side::Enter, 1.8));
         let last = longer.iter().map(|(_, at, _)| *at).fold(0.0_f64, f64::max);
         // 1.8 s is held to MAX_SECONDS first, so what lands is 1.5 of 4.
-        assert!((last - 1.5 / 4.0).abs() < 1e-9, "held to the longest: {last}");
+        assert!(
+            (last - 1.5 / 4.0).abs() < 1e-9,
+            "held to the longest: {last}"
+        );
         // On a short clip the window itself is the limit: half of two seconds
         // is 0.75, well past the middle, so it is capped there.
         let short = Clip::blank("c2", "t1", ClipKind::Text, "a title", 0.0, 2.0);
         let keys = written(commands(&short, Preset::ElasticPop, Side::Enter, 1.5));
         let last = keys.iter().map(|(_, at, _)| *at).fold(0.0_f64, f64::max);
-        assert!((last - MAX_SPAN).abs() < 1e-9, "capped at the middle: {last}");
+        assert!(
+            (last - MAX_SPAN).abs() < 1e-9,
+            "capped at the middle: {last}"
+        );
         // And an exit of the same length ends on the tail.
         let keys = written(commands(&clip(), Preset::ElasticPop, Side::Exit, 1.0));
         let first = keys.iter().map(|(_, at, _)| *at).fold(1.0_f64, f64::min);
         let last = keys.iter().map(|(_, at, _)| *at).fold(0.0_f64, f64::max);
-        assert!((first - 0.75).abs() < 1e-9, "one second before the tail: {first}");
+        assert!(
+            (first - 0.75).abs() < 1e-9,
+            "one second before the tail: {first}"
+        );
         assert_eq!(last, 1.0, "ends on the tail");
     }
 
@@ -723,7 +733,12 @@ mod tests {
             value: 0.72,
             ease: KeyEase::OUT,
         });
-        let cleared = cleared(commands(&keyed, Preset::ElasticPop, Side::Exit, DEFAULT_SECONDS));
+        let cleared = cleared(commands(
+            &keyed,
+            Preset::ElasticPop,
+            Side::Exit,
+            DEFAULT_SECONDS,
+        ));
         let cleared_scale: Vec<f64> = cleared
             .iter()
             .filter(|(property, _)| *property == KeyProperty::Scale)
@@ -733,7 +748,11 @@ mod tests {
             cleared_scale.is_empty(),
             "the entrance key at 0.0875 must survive an exit: {cleared_scale:?}"
         );
-        assert_eq!(cleared.len(), 0, "nothing in the tail to clear: {cleared:?}");
+        assert_eq!(
+            cleared.len(),
+            0,
+            "nothing in the tail to clear: {cleared:?}"
+        );
     }
 
     #[test]
@@ -762,7 +781,12 @@ mod tests {
 
     #[test]
     fn a_during_preset_loops_inside_the_middle_and_stops_short_of_the_ends() {
-        let keys = written(commands(&clip(), Preset::Pulse, Side::During, DEFAULT_SECONDS));
+        let keys = written(commands(
+            &clip(),
+            Preset::Pulse,
+            Side::During,
+            DEFAULT_SECONDS,
+        ));
         assert!(keys.len() >= 7, "three cycles: {keys:?}");
         for (property, at, _) in &keys {
             assert_eq!(*property, KeyProperty::Scale);
@@ -814,12 +838,14 @@ mod tests {
             // end of its window: identity values only.
             let last_of = |property: KeyProperty| {
                 keys.iter()
-                    .filter(|(p, _, _)| *p == property)
-                    .next_back()
+                    .rfind(|(p, _, _)| *p == property)
                     .map(|(_, _, value)| *value)
             };
             if let Some(value) = last_of(KeyProperty::Scale) {
-                assert!((value - 1.0).abs() < 1e-9, "{preset:?} leaves scale at {value}");
+                assert!(
+                    (value - 1.0).abs() < 1e-9,
+                    "{preset:?} leaves scale at {value}"
+                );
             }
             if let Some(value) = last_of(KeyProperty::Rotation) {
                 assert!(

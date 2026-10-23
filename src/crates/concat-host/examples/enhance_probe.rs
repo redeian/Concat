@@ -61,7 +61,10 @@ fn main() -> Result<(), String> {
     );
     let (sharp_model, sharp_plain) = (sharpness(&enhanced), sharpness(&plain));
     println!("edge sharpness: model {sharp_model:.1} · plain {sharp_plain:.1}");
-    println!("pixels the model changed: {}", differences(&enhanced, &plain));
+    println!(
+        "pixels the model changed: {}",
+        differences(&enhanced, &plain)
+    );
 
     let sized = enhanced.width() == width * 2 && enhanced.height() == height * 2;
     let sharper = sharp_model > sharp_plain;

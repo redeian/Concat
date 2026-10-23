@@ -468,7 +468,8 @@ impl Api {
         // runs on the window's own document, so the edit shows as it lands
         // and the window's own ⌘Z takes it back like any other.
         let live = self.window.is_some()
-            && named_path(&request).is_some_and(|path| self.open.holder(path) == Some(Holder::Window));
+            && named_path(&request)
+                .is_some_and(|path| self.open.holder(path) == Some(Holder::Window));
         if live && let Some(window) = self.window.clone() {
             return match window.call(request) {
                 Ok(response) => response,
@@ -1225,6 +1226,28 @@ fn encode_png(
     writer.finish()
 }
 
+/// The project folder a request names, for the ones that name one: what
+/// live mode matches against the window's register. A probe names a file
+/// and a create names a folder to make a project in, so neither is here.
+fn named_path(request: &Request) -> Option<&str> {
+    match request {
+        Request::ProjectOpen { path }
+        | Request::ProjectClose { path, .. }
+        | Request::ProjectGet { path }
+        | Request::ProjectDocument { path }
+        | Request::ProjectSave { path, .. }
+        | Request::ProjectSetVideo { path, .. }
+        | Request::EditApply { path, .. }
+        | Request::EditUndo { path }
+        | Request::EditRedo { path }
+        | Request::MediaImport { path, .. }
+        | Request::TemplateSave { path, .. }
+        | Request::ExportRun { path, .. }
+        | Request::PreviewFrame { path, .. } => Some(path),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1827,27 +1850,5 @@ mod tests {
             "{}",
             refused.message
         );
-    }
-}
-
-/// The project folder a request names, for the ones that name one: what
-/// live mode matches against the window's register. A probe names a file
-/// and a create names a folder to make a project in, so neither is here.
-fn named_path(request: &Request) -> Option<&str> {
-    match request {
-        Request::ProjectOpen { path }
-        | Request::ProjectClose { path, .. }
-        | Request::ProjectGet { path }
-        | Request::ProjectDocument { path }
-        | Request::ProjectSave { path, .. }
-        | Request::ProjectSetVideo { path, .. }
-        | Request::EditApply { path, .. }
-        | Request::EditUndo { path }
-        | Request::EditRedo { path }
-        | Request::MediaImport { path, .. }
-        | Request::TemplateSave { path, .. }
-        | Request::ExportRun { path, .. }
-        | Request::PreviewFrame { path, .. } => Some(path),
-        _ => None,
     }
 }

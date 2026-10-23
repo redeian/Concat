@@ -49,7 +49,11 @@ pub fn plan(project: &Project, clip_id: &str, settings: Settings) -> Result<Vec<
     if !clip.speed.is_finite() || clip.speed <= 0.0 {
         return Err("That clip's speed is not a number this can work with.".to_owned());
     }
-    if clip.speed_curve.as_ref().is_some_and(|points| !points.is_empty()) {
+    if clip
+        .speed_curve
+        .as_ref()
+        .is_some_and(|points| !points.is_empty())
+    {
         return Err(
             "That clip's speed rides a curve, so a silence would not land where it is cut."
                 .to_owned(),

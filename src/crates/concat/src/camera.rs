@@ -37,6 +37,7 @@ pub const MOVE_SECONDS: f64 = 0.3;
 /// look; past two and a half a 1080p recording is showing interpolated guesses
 /// instead of characters, which is why the list stops at four and warns above
 /// two.
+#[allow(dead_code)] // The panel's own list; nothing outside it reads it yet.
 pub const ZOOMS: [f64; 3] = [1.5, 2.0, 4.0];
 
 /// Where the camera is pointed, and how far in.
@@ -100,6 +101,7 @@ pub const MAX_MOVE_SECONDS: f64 = 1.0;
 /// A punch in leaves the camera in; a punch out leaves it out. Both end with a
 /// key at the end of the clip so the camera does not drift back to where it
 /// started, which is what a single pair of keys would do.
+#[allow(dead_code)] // The default-timed punch; the panel times its own.
 pub fn commands(clip: &Clip, punch: Punch, side: Side, playhead: f64) -> Command {
     commands_with_move(clip, punch, side, playhead, MOVE_SECONDS)
 }
@@ -118,8 +120,16 @@ pub fn commands_with_move(
     let duration = clip.duration;
     let (offset_x, offset_y) = focus_offsets(punch.scale, punch.focus);
     let (from, to, ease) = match side {
-        Side::In => ((1.0, 0.0, 0.0), (punch.scale, offset_x, offset_y), KeyEase::OUT),
-        Side::Out => ((punch.scale, offset_x, offset_y), (1.0, 0.0, 0.0), KeyEase::IN),
+        Side::In => (
+            (1.0, 0.0, 0.0),
+            (punch.scale, offset_x, offset_y),
+            KeyEase::OUT,
+        ),
+        Side::Out => (
+            (punch.scale, offset_x, offset_y),
+            (1.0, 0.0, 0.0),
+            KeyEase::IN,
+        ),
     };
     let start = at(playhead, 0.0, duration, move_seconds);
     let moved = at(playhead, 1.0, duration, move_seconds);
@@ -137,21 +147,14 @@ pub fn commands_with_move(
     key(KeyProperty::Scale, start, from.0, ease);
     key(KeyProperty::Scale, moved, to.0, ease);
     key(KeyProperty::Scale, 1.0, to.0, KeyEase::LINEAR);
-    if side == Side::In {
-        key(KeyProperty::OffsetX, start, from.1, ease);
-        key(KeyProperty::OffsetX, moved, to.1, ease);
-        key(KeyProperty::OffsetX, 1.0, to.1, KeyEase::LINEAR);
-        key(KeyProperty::OffsetY, start, from.2, ease);
-        key(KeyProperty::OffsetY, moved, to.2, ease);
-        key(KeyProperty::OffsetY, 1.0, to.2, KeyEase::LINEAR);
-    } else {
-        key(KeyProperty::OffsetX, start, from.1, ease);
-        key(KeyProperty::OffsetX, moved, to.1, ease);
-        key(KeyProperty::OffsetX, 1.0, to.1, KeyEase::LINEAR);
-        key(KeyProperty::OffsetY, start, from.2, ease);
-        key(KeyProperty::OffsetY, moved, to.2, ease);
-        key(KeyProperty::OffsetY, 1.0, to.2, KeyEase::LINEAR);
-    }
+    // The offsets ride the same three keys whichever way the punch goes:
+    // `from` and `to` already carry the direction.
+    key(KeyProperty::OffsetX, start, from.1, ease);
+    key(KeyProperty::OffsetX, moved, to.1, ease);
+    key(KeyProperty::OffsetX, 1.0, to.1, KeyEase::LINEAR);
+    key(KeyProperty::OffsetY, start, from.2, ease);
+    key(KeyProperty::OffsetY, moved, to.2, ease);
+    key(KeyProperty::OffsetY, 1.0, to.2, KeyEase::LINEAR);
     Command::Batch { commands: batch }
 }
 
@@ -162,7 +165,11 @@ pub fn commands_with_move(
 /// showing the frame as it is, not "keep whatever else was keyed on it".
 pub fn reset(clip: &Clip) -> Command {
     let mut batch = Vec::new();
-    for property in [KeyProperty::Scale, KeyProperty::OffsetX, KeyProperty::OffsetY] {
+    for property in [
+        KeyProperty::Scale,
+        KeyProperty::OffsetX,
+        KeyProperty::OffsetY,
+    ] {
         if clip.keys_on(property).next().is_some() {
             batch.push(Command::ClearClipKeys {
                 clip_id: clip.id.clone(),
@@ -190,7 +197,10 @@ mod tests {
             .into_iter()
             .filter_map(|command| match command {
                 Command::SetClipKey {
-                    property, at, value, ..
+                    property,
+                    at,
+                    value,
+                    ..
                 } => Some((property, at, value)),
                 _ => None,
             })

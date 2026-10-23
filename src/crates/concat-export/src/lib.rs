@@ -2530,6 +2530,13 @@ mod tests {
                 output: concat_core::frame::Signal::Sdr,
             }
         };
+        // No keys on the camera, so it is identity at every frame the
+        // treatment covers: this test is about the effect and the strength.
+        let camera = Clip::new(
+            MediaRef::new("layer.mp4"),
+            Rational::ZERO,
+            Rational::from_int(10),
+        );
         let mono = Treatment {
             start: Rational::ZERO,
             end: Rational::from_int(10),
@@ -2538,6 +2545,7 @@ mod tests {
             strength: 1.0,
             ramp_in: 0.0,
             ramp_out: 0.0,
+            camera,
         };
         let Some(mut compositor) = WgpuCompositor::new() else {
             return; // no renderer here

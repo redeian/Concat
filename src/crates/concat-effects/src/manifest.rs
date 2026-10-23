@@ -79,8 +79,9 @@ pub struct Manifest {
 pub struct Enter {
     /// The knob, by the manifest key it is declared under.
     pub key: String,
-    /// Where it starts and where it arrives.
+    /// The value it starts at.
     pub from: f64,
+    /// The value it arrives at.
     pub to: f64,
     /// How far along the clip the arrival takes, as a fraction of it: the
     /// words of a title are usually in place before the clip is over.

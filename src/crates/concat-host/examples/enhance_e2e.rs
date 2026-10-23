@@ -22,15 +22,16 @@ use concat_host::enhance::{DEFAULT_STRENGTH, EnhanceRequest, Enhancers, Progress
 
 fn main() -> Result<(), String> {
     let mut args = std::env::args().skip(1);
-    let media = args.next().ok_or_else(|| {
-        "usage: enhance_e2e <clip.mp4> <app-data-dir> [project-dir]".to_owned()
-    })?;
+    let media = args
+        .next()
+        .ok_or_else(|| "usage: enhance_e2e <clip.mp4> <app-data-dir> [project-dir]".to_owned())?;
     let data = args
         .next()
         .ok_or_else(|| "the app's data directory is where the model lives".to_owned())?;
-    let project = args
-        .next()
-        .map_or_else(|| std::env::temp_dir().join("capycut-enhance-e2e"), PathBuf::from);
+    let project = args.next().map_or_else(
+        || std::env::temp_dir().join("capycut-enhance-e2e"),
+        PathBuf::from,
+    );
 
     let data = Path::new(&data);
     let service = Enhancers::new(data);
@@ -64,7 +65,10 @@ fn main() -> Result<(), String> {
     if !target.exists() {
         return Err("the copy the service named does not exist".to_owned());
     }
-    println!("copy: {} bytes", std::fs::metadata(&target).map(|m| m.len()).unwrap_or(0));
+    println!(
+        "copy: {} bytes",
+        std::fs::metadata(&target).map(|m| m.len()).unwrap_or(0)
+    );
 
     let (source_width, source_height) = dimensions(&media)?;
     let (copy_width, copy_height) = dimensions(&target.to_string_lossy())?;
@@ -101,7 +105,10 @@ fn dimensions(path: &str) -> Result<(u32, u32), String> {
         .split_once('x')
         .ok_or_else(|| format!("ffprobe said {line:?} for {path}"))?;
     Ok((
-        width.trim().parse().map_err(|_| format!("width {width:?}"))?,
+        width
+            .trim()
+            .parse()
+            .map_err(|_| format!("width {width:?}"))?,
         height
             .trim()
             .parse()

@@ -26,8 +26,8 @@ mod media;
 // CapyCut: the span cut behind *Remove silence*, in a file of its own.
 mod span;
 // CapyCut: recolouring a placed shape, in a file of its own.
-mod shape;
 mod properties;
+mod shape;
 mod timelines;
 mod tracks;
 

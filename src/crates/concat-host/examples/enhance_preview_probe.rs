@@ -20,9 +20,19 @@ use concat_host::enhance::{Enhancers, PreviewRequest};
 
 fn main() -> Result<(), String> {
     let mut args = std::env::args().skip(1);
-    let media = args.next().ok_or("usage: probe <media> <seconds> <factor> <data-dir> <out-dir>")?;
-    let seconds: f64 = args.next().unwrap_or_else(|| "0".into()).parse().map_err(|_| "seconds")?;
-    let factor: u32 = args.next().unwrap_or_else(|| "2".into()).parse().map_err(|_| "factor")?;
+    let media = args
+        .next()
+        .ok_or("usage: probe <media> <seconds> <factor> <data-dir> <out-dir>")?;
+    let seconds: f64 = args
+        .next()
+        .unwrap_or_else(|| "0".into())
+        .parse()
+        .map_err(|_| "seconds")?;
+    let factor: u32 = args
+        .next()
+        .unwrap_or_else(|| "2".into())
+        .parse()
+        .map_err(|_| "factor")?;
     let data = args.next().ok_or("data dir")?;
     let out = args.next().unwrap_or_else(|| ".".into());
 

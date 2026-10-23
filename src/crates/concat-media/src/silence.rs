@@ -27,8 +27,8 @@
 //! | VideoCascade API | -30 dB | 0.5 s | none |
 //! | auto-editor default edit | ~-28 dB (4% amplitude) | - | 0.2 s margin |
 //!
-//! So: -30 dBFS, half a second, and a fifth of a second of padding either side
-//! - the padding is what keeps a plosive or a trailing breath from being
+//! So: -30 dBFS, half a second, and a fifth of a second of padding either
+//! side. The padding is what keeps a plosive or a trailing breath from being
 //! clipped off the front of the next word, and it is why the default cut
 //! sounds like an edit rather than like a machine.
 //!
@@ -144,12 +144,7 @@ fn levels(samples: &[f32], rate: u32, channels: u16) -> Vec<f64> {
 /// Ranges are in order, do not overlap, and are all at least
 /// [`Settings::min_silence`] long before padding - so a range narrower than
 /// its padding disappears rather than becoming a zero-length cut.
-pub fn detect(
-    samples: &[f32],
-    rate: u32,
-    channels: u16,
-    settings: &Settings,
-) -> Vec<Range<f64>> {
+pub fn detect(samples: &[f32], rate: u32, channels: u16, settings: &Settings) -> Vec<Range<f64>> {
     let settings = settings.sane();
     let levels = levels(samples, rate, channels);
     if levels.is_empty() {
@@ -353,7 +348,10 @@ mod tests {
         let samples = joined(&[tone(0.5), quiet(), tone(0.5)]);
         let found = detect(&samples, RATE, 1, &settings_with_padding(0.2));
         assert_eq!(found.len(), 1, "{found:?}");
-        assert!((found[0].end - found[0].start - 0.6).abs() < 0.02, "{found:?}");
+        assert!(
+            (found[0].end - found[0].start - 0.6).abs() < 0.02,
+            "{found:?}"
+        );
     }
 
     fn settings_with_padding(padding: f64) -> Settings {

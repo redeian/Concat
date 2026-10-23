@@ -81,7 +81,10 @@ fn handle(
     request: Request,
 ) -> Option<Result<Reply, ApiError>> {
     let mut studio = studio.borrow_mut();
-    let open = studio.session.as_ref().map(|session| session.path().to_owned());
+    let open = studio
+        .session
+        .as_ref()
+        .map(|session| session.path().to_owned());
     let open = match open {
         Some(open) => open,
         None => {

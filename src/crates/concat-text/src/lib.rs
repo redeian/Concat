@@ -29,11 +29,11 @@
 //! stores them, so a title looks the same at 720p and 4K. Everything here
 //! converts to pixels once, at the top.
 
+use icu_segmenter::options::WordBreakInvariantOptions;
+use icu_segmenter::{WordSegmenter, WordSegmenterBorrowed};
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::ops::Range;
-use icu_segmenter::options::WordBreakInvariantOptions;
-use icu_segmenter::{WordSegmenter, WordSegmenterBorrowed};
 use std::sync::{Arc, Mutex};
 
 use tiny_skia::{
@@ -327,10 +327,10 @@ pub const BASE_FONTS: [&[u8]; 54] = [
     include_bytes!("../fonts/BaiJamjuree-Bold.ttf"), // modern captions
     include_bytes!("../fonts/ChakraPetch-Bold.ttf"), // tech, games
     include_bytes!("../fonts/Kodchasan-Bold.ttf"), // rounded, friendly
-    include_bytes!("../fonts/Mitr-Bold.ttf"),   // soft display
+    include_bytes!("../fonts/Mitr-Bold.ttf"),    // soft display
     include_bytes!("../fonts/Chonburi-Regular.ttf"), // heavy Thai display
     include_bytes!("../fonts/Sriracha-Regular.ttf"), // brush
-    include_bytes!("../fonts/Mali-Bold.ttf"),   // handwriting
+    include_bytes!("../fonts/Mali-Bold.ttf"),    // handwriting
     include_bytes!("../fonts/Trirong-Bold.ttf"), // serif
 ];
 
@@ -1293,10 +1293,11 @@ fn thai_words(text: &str, span: Range<usize>) -> Vec<Range<usize>> {
     }
     THAI.with(|cell| {
         let mut held = cell.borrow_mut();
-        // Borrowed from the compiled-in data, so it is a handle, not a copy.
-        let segmenter = held
-            .get_or_insert_with(|| WordSegmenter::new_dictionary(WordBreakInvariantOptions::default()))
-            .clone();
+        // Borrowed from the compiled-in data, so it is a handle, not a copy -
+        // and a handle that is `Copy`, which is why it is taken by value.
+        let segmenter = *held.get_or_insert_with(|| {
+            WordSegmenter::new_dictionary(WordBreakInvariantOptions::default())
+        });
         let body = &text[span.clone()];
         let mut out = Vec::new();
         let mut last = 0usize;
@@ -2090,7 +2091,10 @@ fn paint_shape(style: &ShapeStyle, width: u32, height: u32) -> Result<(Pixmap, B
             true
         }
         Figure::Diamond => {
-            polygon(&mut path, &[(cx, top), (right, cy), (cx, bottom), (left, cy)]);
+            polygon(
+                &mut path,
+                &[(cx, top), (right, cy), (cx, bottom), (left, cy)],
+            );
             true
         }
         Figure::Hexagon => {

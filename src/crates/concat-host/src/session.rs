@@ -438,7 +438,10 @@ fn media_inside(document: &mut serde_json::Value, folder: &str, direction: Direc
     let folder = folder.trim_end_matches('/');
     // `concat.json` keeps the bin at the top level; the API's own document
     // view nests it, so both shapes are read.
-    let media = match document.get_mut("media").and_then(|held| held.as_array_mut()) {
+    let media = match document
+        .get_mut("media")
+        .and_then(|held| held.as_array_mut())
+    {
         Some(media) => media,
         None => match document
             .get_mut("project")

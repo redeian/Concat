@@ -94,7 +94,8 @@ fn media_fingerprint(path: &str) -> u64 {
     }
     let print = fnv1a(&bytes);
     SEEN.with(|seen| {
-        seen.borrow_mut().insert(path.to_owned(), (len, stamp, print));
+        seen.borrow_mut()
+            .insert(path.to_owned(), (len, stamp, print));
     });
     print
 }
