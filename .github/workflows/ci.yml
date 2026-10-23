@@ -156,8 +156,12 @@ jobs:
       # and a slow test are told apart by which step ran out of time. One
       # job at a time and no debug info, to stay inside the runner's
       # memory; the run below finds everything already built.
+      # A cold cache pays for the whole workspace: the first run on a fork,
+      # where the workflows had been off, spent twenty-five minutes here and
+      # was killed while still compiling. The warm runs this step exists to
+      # make cheap are minutes; the first one is what the ceiling is for.
       - name: Build the tests
-        timeout-minutes: 25
+        timeout-minutes: 60
         working-directory: src
         env:
           CARGO_PROFILE_DEV_DEBUG: "0"
