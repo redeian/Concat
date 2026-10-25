@@ -1494,6 +1494,12 @@ struct ShelfStamp {
 /// The built-in colour package's id; see `adjust_rows` and `Studio::adjust_set`.
 const ADJUST_ID: &str = "concat.adjust";
 
+// CapyCut: what the animation panel lights. -1 is an end with no animation on
+// it, -2 a batch whose clips do not agree, so a mixed selection lights nothing
+// and says so rather than showing one clip's preset for all of them.
+const NONE_ANIMATION: i32 = -1;
+const MIXED_ANIMATION: i32 = -2;
+
 /// The kinds the colour panel grades: a picture, and a layer, which grades
 /// everything beneath it - an adjustment layer is a layer whose chain
 /// starts with the panel's own package.
@@ -11421,6 +11427,12 @@ impl Studio {
             silence_gap: self.prefs.silence.gap as f32,
             // CapyCut: how long an animation preset runs, from the same prefs.
             animation_seconds: self.prefs.animation.seconds as f32,
+            // CapyCut: which preset each end of the selection carries, so the
+            // panel lights what the timeline holds instead of the last button
+            // pressed.
+            anim_enter: self.detected_animation(crate::animation::Side::Enter),
+            anim_during: self.detected_animation(crate::animation::Side::During),
+            anim_exit: self.detected_animation(crate::animation::Side::Exit),
             // CapyCut: where the camera is pointed, how far in, how fast.
             camera_zoom: self.prefs.camera.zoom as f32,
             camera_focus_x: self.prefs.camera.focus_x as f32,
@@ -13205,13 +13217,15 @@ impl Studio {
         });
     }
 
-    /// Applies one of the animation presets to the selected clip, as one undo
+    /// Applies one of the animation presets to every selected clip, as one undo
     /// step.
     ///
     /// A title, a figure and a sticker built from one all take it: a preset is
     /// nothing but keyframes on the clip's own properties, so there is no
     /// animation engine to teach and the result stays editable with the same
-    /// diamonds the curve editor shows.
+    /// diamonds the curve editor shows. With several clips selected the same
+    /// preset lands on all of them, and each end it touches is cleared first -
+    /// so a batch is one look, not a stack of arrivals.
     pub fn apply_animation(&mut self, preset: i32, side: i32) {
         let (Some(preset), Some(side)) = (
             crate::animation::Preset::from_index(preset),
@@ -13219,46 +13233,89 @@ impl Studio {
         ) else {
             return;
         };
-        let Some(id) = self.sole_selection() else {
+        let ids = self.edit_targets();
+        if ids.is_empty() {
             return;
-        };
-        let Some(clip) = self.clip(&id).cloned() else {
+        }
+        let seconds = self.prefs.animation.seconds;
+        let mut commands = Vec::new();
+        let mut first: Option<model::Clip> = None;
+        for id in &ids {
+            let Some(clip) = self.clip(id).cloned() else {
+                continue;
+            };
+            commands.push(crate::animation::commands(&clip, preset, side, seconds));
+            if first.is_none() {
+                first = Some(clip);
+            }
+        }
+        if commands.is_empty() {
             return;
-        };
+        }
         self.flush_commit();
-        self.apply(crate::animation::commands(
-            &clip,
-            preset,
-            side,
-            self.prefs.animation.seconds,
-        ));
+        self.apply(Command::Batch { commands });
         // Land the playhead at the start of the animation, so a click shows
         // something instead of leaving the monitor on whatever frame it was
         // parked on. The user presses play; nothing scrubs on its own.
-        if clip.duration > 0.0 {
-            let span = self.prefs.animation.seconds / clip.duration;
-            let (from, _) = side.window(span);
-            self.playhead = (clip.start + from * clip.duration) as f32;
+        if let Some(clip) = first {
+            if clip.duration > 0.0 {
+                let span = seconds / clip.duration;
+                let (from, _) = side.window(span);
+                self.playhead = (clip.start + from * clip.duration) as f32;
+            }
         }
     }
 
-    /// CapyCut: takes the animation off one side of the selected clip.
+    /// CapyCut: takes the animation off one side of every selected clip, as one
+    /// undo step.
     ///
     /// Not an undo of a preset - a preset writes keys the user may have moved
-    /// since - but the same thing said plainly: this end of the clip has no
+    /// since - but the same thing said plainly: this end of these clips has no
     /// animation on it any more.
     pub fn clear_animation(&mut self, side: i32) {
         let Some(side) = crate::animation::Side::from_index(side) else {
             return;
         };
-        let Some(clip_id) = self.sole_selection() else {
+        let ids = self.edit_targets();
+        if ids.is_empty() {
             return;
-        };
-        let Some(clip) = self.clip(&clip_id).cloned() else {
+        }
+        let mut commands = Vec::new();
+        for id in &ids {
+            let Some(clip) = self.clip(id).cloned() else {
+                continue;
+            };
+            commands.push(crate::animation::clear(&clip, side));
+        }
+        if commands.is_empty() {
             return;
-        };
+        }
         self.flush_commit();
-        self.apply(crate::animation::clear(&clip, side));
+        self.apply(Command::Batch { commands });
+    }
+
+    /// The preset on one side of the selection, as the panel's button index:
+    /// -1 when none of the selected clips carries one, -2 when they disagree.
+    ///
+    /// Read back off the clips' keys on every refresh rather than remembered
+    /// here, so the tile that is lit is the animation the timeline actually
+    /// holds - including one applied from somewhere else, and including a clip
+    /// whose keys have since been moved by hand.
+    fn detected_animation(&self, side: crate::animation::Side) -> i32 {
+        let mut seen: Option<Option<crate::animation::Preset>> = None;
+        for id in self.edit_targets() {
+            let Some(clip) = self.clip(&id) else {
+                continue;
+            };
+            let found = crate::animation::detect(clip, side);
+            match &seen {
+                None => seen = Some(found),
+                Some(first) if *first == found => {}
+                Some(_) => return MIXED_ANIMATION,
+            }
+        }
+        seen.flatten()
+            .map_or(NONE_ANIMATION, |preset| preset.index())
     }
 
     /// CapyCut: punches the camera in, or out, at the playhead.

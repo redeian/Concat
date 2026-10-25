@@ -599,6 +599,85 @@ pub fn clear(clip: &Clip, side: Side) -> Command {
     Command::Batch { commands: batch }
 }
 
+/// The properties a preset may write, in the order `clear` walks them.
+const KEYED: [KeyProperty; 5] = [
+    KeyProperty::Scale,
+    KeyProperty::OffsetX,
+    KeyProperty::OffsetY,
+    KeyProperty::Rotation,
+    KeyProperty::Opacity,
+];
+
+/// Which preset, if any, is on one side of this clip.
+///
+/// Read back out of the clip's own keys rather than remembered somewhere in the
+/// document: a preset is nothing but keys, so what the panel lights has to be
+/// what the timeline holds. A key the user has since moved is then honestly no
+/// preset at all, and a clip carrying two arrivals the engine never wrote is
+/// nobody's preset either.
+pub fn detect(clip: &Clip, side: Side) -> Option<Preset> {
+    let held: Vec<(KeyProperty, Key)> = KEYED
+        .into_iter()
+        .flat_map(|property| {
+            clip.keys_on(property)
+                .filter(|key| side.owns(key.at))
+                .map(move |key| (property, (key.at, key.value, key.ease)))
+        })
+        .collect();
+    if held.is_empty() {
+        return None;
+    }
+    let candidates: &[Preset] = match side {
+        Side::During => &Preset::DURING,
+        _ => &Preset::ENTER_EXIT,
+    };
+    candidates
+        .iter()
+        .copied()
+        .find(|preset| same_shape(&held, *preset, side))
+}
+
+/// One key of a preset, in the terms a preset is recognised by: which property,
+/// how far through the side's own stretch, what value, and which approach. The
+/// time is a rounded fraction of the stretch's extremes rather than a fraction
+/// of the clip, so the same preset is recognised however long it was asked to
+/// run - which is the difference between reading the keys and remembering a
+/// number.
+fn shape(keys: &[(KeyProperty, Key)]) -> Vec<(KeyProperty, i64, f64, KeyEase)> {
+    let lo = keys.iter().map(|(_, key)| key.0).fold(f64::MAX, f64::min);
+    let hi = keys.iter().map(|(_, key)| key.0).fold(f64::MIN, f64::max);
+    let reach = (hi - lo).max(f64::MIN_POSITIVE);
+    keys.iter()
+        .map(|(property, key)| {
+            let part = (key.0 - lo) / reach;
+            (*property, (part * 1e6).round() as i64, key.1, key.2)
+        })
+        .collect()
+}
+
+/// Whether `held` has the shape `preset` writes on `side`, whatever span it was
+/// written at: the same properties, the same number of keys, the same places
+/// within the stretch, the same values, the same approach.
+fn same_shape(held: &[(KeyProperty, Key)], preset: Preset, side: Side) -> bool {
+    let expected: Vec<(KeyProperty, Key)> = keys(preset, side, DEFAULT_SECONDS)
+        .into_iter()
+        .flat_map(|(property, written)| written.into_iter().map(move |key| (property, key)))
+        .collect();
+    if expected.len() != held.len() {
+        return false;
+    }
+    let have = shape(held);
+    let want = shape(&expected);
+    want.iter().all(|(property, part, value, ease)| {
+        have.iter()
+            .any(|(held_property, held_part, held_value, held_ease)| {
+                held_property == property
+                    && held_part == part
+                    && (held_value - value).abs() < 1e-9
+                    && held_ease == ease
+            })
+    })
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -911,5 +990,56 @@ mod tests {
         for side in [Side::Enter, Side::During, Side::Exit] {
             assert_eq!(Side::from_index(side.index()), Some(side));
         }
+    }
+
+    /// What a preset writes on a clip is what the panel reads back off it, on
+    /// whichever end it was written - a clip carrying an arrival is not also
+    /// said to be carrying an exit.
+    #[test]
+    fn every_preset_is_read_back_from_the_keys_it_wrote() {
+        for preset in Preset::ALL {
+            let sides: &[Side] = if preset.runs_during() {
+                &[Side::During]
+            } else {
+                &[Side::Enter, Side::Exit]
+            };
+            for side in sides {
+                let mut clip = clip();
+                let span = DEFAULT_SECONDS / clip.duration;
+                for (property, written) in keys(preset, *side, span) {
+                    for (at, value, ease) in written {
+                        clip.set_key(property, at, value, ease);
+                    }
+                }
+                assert_eq!(detect(&clip, *side), Some(preset), "{preset:?} on {side:?}");
+                let other = match side {
+                    Side::Enter => Side::Exit,
+                    Side::Exit => Side::Enter,
+                    Side::During => Side::Enter,
+                };
+                assert_eq!(
+                    detect(&clip, other),
+                    None,
+                    "{preset:?} leaks into {other:?}"
+                );
+            }
+        }
+    }
+
+    /// A key the user has since moved is no preset at all, and a clip with no
+    /// keys on a side has nothing to read back there.
+    #[test]
+    fn a_moved_key_is_no_preset_and_an_empty_side_is_none() {
+        let mut clip = clip();
+        assert_eq!(detect(&clip, Side::Enter), None);
+        let span = DEFAULT_SECONDS / clip.duration;
+        for (property, written) in keys(Preset::Fade, Side::Enter, span) {
+            for (at, value, ease) in written {
+                clip.set_key(property, at, value, ease);
+            }
+        }
+        assert_eq!(detect(&clip, Side::Enter), Some(Preset::Fade));
+        clip.set_key(KeyProperty::Opacity, 0.05, 0.3, KeyEase::LINEAR);
+        assert_eq!(detect(&clip, Side::Enter), None, "a hand-moved key");
     }
 }

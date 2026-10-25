@@ -797,6 +797,9 @@ export component ConfigPane inherits Rectangle {
                 if root.showing == "Animation": VerticalLayout {
                     AnimationSection {
                         seconds: root.selected.animation-seconds;
+                        model-enter: root.selected.anim-enter;
+                        model-during: root.selected.anim-during;
+                        model-exit: root.selected.anim-exit;
                         camera: root.is-layer;
                         camera-zoom: root.selected.camera-zoom;
                         camera-focus-x: root.selected.camera-focus-x;

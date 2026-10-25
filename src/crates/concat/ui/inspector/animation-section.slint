@@ -119,6 +119,18 @@ export component AnimationSection inherits VerticalLayout {
     in-out property <int> chosen-during: -1;
     in-out property <int> chosen-exit: -1;
 
+    /// What the selection actually carries, per group: the panel's button
+    /// index, -1 for an end with no animation on it and -2 when the selected
+    /// clips do not agree. Seeded into `chosen-*` whenever it changes, so a
+    /// press still answers at once and a change of selection replaces the
+    /// answer with the truth.
+    in property <int> model-enter: -1;
+    in property <int> model-during: -1;
+    in property <int> model-exit: -1;
+    changed model-enter => { root.chosen-enter = root.model-enter; }
+    changed model-during => { root.chosen-during = root.model-during; }
+    changed model-exit => { root.chosen-exit = root.model-exit; }
+
     property <[string]> arrivals: [
         I18n.t("anim.elasticPop"),
         I18n.t("anim.fade"),
@@ -146,7 +158,7 @@ export component AnimationSection inherits VerticalLayout {
         spacing: 6px;
 
         GroupHeader {
-            title: I18n.t("anim.enter");
+            title: root.model-enter == -2 ? I18n.t("anim.enter") + " (mixed)" : I18n.t("anim.enter");
             cleared => {
                 root.chosen-enter = -1;
                 root.clear(0);
@@ -174,7 +186,7 @@ export component AnimationSection inherits VerticalLayout {
         spacing: 6px;
 
         GroupHeader {
-            title: I18n.t("anim.during");
+            title: root.model-during == -2 ? I18n.t("anim.during") + " (mixed)" : I18n.t("anim.during");
             cleared => {
                 root.chosen-during = -1;
                 root.clear(1);
@@ -202,7 +214,7 @@ export component AnimationSection inherits VerticalLayout {
         spacing: 6px;
 
         GroupHeader {
-            title: I18n.t("anim.exit");
+            title: root.model-exit == -2 ? I18n.t("anim.exit") + " (mixed)" : I18n.t("anim.exit");
             cleared => {
                 root.chosen-exit = -1;
                 root.clear(2);

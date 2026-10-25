@@ -378,6 +378,11 @@ export struct SelectedClipData {
     silence-gap: float,
     // CapyCut: how long an animation preset runs, in seconds.
     animation-seconds: float,
+    // CapyCut: which preset each end of the selection carries, as the panel's
+    // button index: -1 none, -2 a batch that does not agree.
+    anim-enter: int,
+    anim-during: int,
+    anim-exit: int,
     // CapyCut: the camera's zoom, the point it holds still, and how fast it
     // reframes.
     camera-zoom: float,
