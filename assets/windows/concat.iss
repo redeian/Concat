@@ -105,10 +105,13 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 
 [Files]
 Source: "{#Stage}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "..\icons\concat.ico"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\icons\capycut.ico"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\CapyCut"; Filename: "{app}\concat.exe"; IconFilename: "{app}\capycut.ico"
+; The way in when a graphics driver draws the window as coloured squares:
+; it turns off Settings > General > Draw on the GPU, which that window hides.
+Name: "{autoprograms}\CapyCut (safe graphics)"; Filename: "{app}\concat.exe"; Parameters: "--software"; IconFilename: "{app}\capycut.ico"
 Name: "{autodesktop}\CapyCut"; Filename: "{app}\concat.exe"; IconFilename: "{app}\capycut.ico"; Tasks: desktopicon
 
 [Run]

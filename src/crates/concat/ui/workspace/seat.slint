@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// SPDX-FileCopyrightText: 2026 Jareer and Concat contributors
+// SPDX-FileCopyrightText: 2026 Jareer Abdullah and Concat contributors
 
 import { Theme } from "../theme/theme.slint";
 // CapyCut: ClipKind, so the stage knows when the selection can be a camera.
@@ -171,6 +171,8 @@ export component Seat inherits Rectangle {
             pane-removable: Editor.seats.length > 1;
             pane-removed => { root.removed(); }
 
+            previewing: Editor.library-audition != "";
+            preview-ended => { Editor.library-audition-filter(Editor.library-audition); }
             output-width: Editor.output-width;
             output-height: Editor.output-height;
             frame-rate: Editor.frame-rate;
@@ -305,6 +307,7 @@ export component Seat inherits Rectangle {
             clip-enhance-run => { Editor.clip-enhance-run(); }
             transition-remove => { Editor.transition-remove(); }
             transition-duration-set(seconds) => { Editor.transition-duration-set(seconds); }
+            transition-param-set(key, value) => { Editor.transition-param-set(key, value); }
 
             project-name: Editor.project-name;
             project-folder: Editor.project-folder;
@@ -319,6 +322,8 @@ export component Seat inherits Rectangle {
 
             selected: Editor.selected-clip;
             transition: Editor.selected-transition;
+            transition-knobs: Editor.transition-knobs;
+            transition-choices: Editor.transition-choices;
             clip-set(field, value) => { Editor.clip-set(field, value); }
             clip-set-text(field, value) => { Editor.clip-set-text(field, value); }
             clip-set-colour(field, value) => { Editor.clip-set-colour(field, value); }
@@ -454,6 +459,7 @@ export component Seat inherits Rectangle {
             lanes-resized(width) => { Editor.lanes-resized(width); }
             floor-pressed => { Editor.blur(); }
             key-mark-moved(from, to) => { Editor.key-mark-moved(from, to); }
+            key-mark-opened => { Editor.key-mark-opened(); }
             scrubbed(seconds) => {
                 Editor.blur();
                 Editor.scrubbed(seconds);

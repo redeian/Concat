@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// SPDX-FileCopyrightText: 2026 Jareer and Concat contributors
+// SPDX-FileCopyrightText: 2026 Jareer Abdullah and Concat contributors
 
 //! What the editor window needs that is not the edit itself.
 //!
@@ -34,6 +34,7 @@ pub mod machine;
 pub mod media;
 pub mod memory;
 pub mod models;
+pub mod net;
 pub mod playback;
 pub mod preview;
 pub mod projects;

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// SPDX-FileCopyrightText: 2026 Jareer and Concat contributors
+// SPDX-FileCopyrightText: 2026 Jareer Abdullah and Concat contributors
 
 import { I18n } from "../i18n.slint";
 import { Theme } from "../theme/theme.slint";
@@ -14,6 +14,7 @@ import {
 import { Button } from "../primitives/modal.slint";
 import { SegmentedControl } from "../primitives/segmented-control.slint";
 import { Select } from "../primitives/select.slint";
+import { SpeedGraph, SpeedRamp } from "speed-ramp.slint";
 import {
     Check,
     ColourField,
@@ -162,6 +163,17 @@ export struct AppliedParamData {
     mixed: bool,
 }
 
+/// One knob of a transition that is a choice among a few - Push's
+/// direction - drawn as segments: a direction is picked, not dialled.
+export struct TransitionChoiceData {
+    key: string,
+    label: string,
+    options: [string],
+    /// The value each option stores, in the same order.
+    values: [float],
+    current: int,
+}
+
 /// One colour knob of one link - a key's screen colour - drawn as a swatch
 /// that opens the picker, with the hex beside it.
 export struct ColourKnobData {
@@ -179,16 +191,14 @@ component StarChip inherits Rectangle {
 
     callback clicked();
 
-    width: 30px;
-    height: Theme.h;
-    border-radius: Theme.r;
-    border-width: 1px;
-    border-color: root.on ? Theme.accent : Theme.line;
+    width: 26px;
+    height: 26px;
+    border-radius: 13px;
     background: root.on ? Theme.accent-soft
         : touch.has-hover ? Theme.field-hover
         : Theme.field;
 
-    animate background, border-color {
+    animate background {
         duration: 100ms;
         easing: cubic-bezier(0.4, 0, 0.2, 1);
     }
@@ -258,10 +268,10 @@ export component PresetStack inherits VerticalLayout {
     // enough that a shelf of twenty is four rows rather than seven.
     property <int> columns: 3;
     property <length> pad: Theme.pad;
-    property <length> cell-gap: 6px;
+    property <length> cell-gap: 8px;
     property <length> cell-w: (root.width - 2 * root.pad
         - (root.columns - 1) * root.cell-gap) / root.columns;
-    property <length> cell-h: 44px;
+    property <length> cell-h: 64px;
     property <int> rows: ceil(root.catalogue.length / root.columns);
 
     /// Links that belong to another section's controls - the audio
@@ -319,70 +329,112 @@ export component PresetStack inherits VerticalLayout {
             padding-left: Theme.pad;
             padding-right: Theme.pad;
 
-            for item[index] in root.applied: VerticalLayout {
+            for item[index] in root.applied: link := VerticalLayout {
                 property <bool> hidden: root.is-hidden(item.id);
-                padding-bottom: self.hidden ? 0px : 6px;
+                /// Folded to its header: a long chain stays scannable, and
+                /// what is dialled in stays put.
+                property <bool> open: true;
+                padding-bottom: self.hidden ? 0px : 8px;
 
                 if !self.hidden: Rectangle {
                     border-radius: Theme.r;
                     background: Theme.raised;
                     border-width: 1px;
-                    border-color: Theme.line;
-                    opacity: item.on ? 1.0 : 0.55;
+                    border-color: head-touch.has-hover ? Theme.line-strong : Theme.line;
+
+                    animate border-color { duration: 120ms; }
 
                     VerticalLayout {
-                        padding-bottom: 8px;
-                        spacing: 4px;
+                        padding-bottom: link.open ? 10px : 0px;
+                        spacing: 6px;
 
-                        HorizontalLayout {
-                            padding-left: 10px;
-                            padding-right: 6px;
-                            padding-top: 6px;
-                            spacing: 2px;
+                        // The header: the link's switch, its name - which
+                        // folds the card - and its place in the order.
+                        Rectangle {
+                            height: 38px;
 
-                            Text {
-                                horizontal-stretch: 1;
-                                text: item.name;
-                                color: item.known ? Theme.fg : Theme.fg-dim;
-                                font-size: Theme.fs;
-                                font-weight: Theme.weight-title;
-                                vertical-alignment: center;
-                                overflow: elide;
+                            head-touch := TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => { link.open = !link.open; }
                             }
 
-                            if !item.known: Text {
-                                text: I18n.t("clipInspector.notInstalled");
-                                color: Theme.fg-dim;
-                                font-size: Theme.fs-xs;
-                                vertical-alignment: center;
-                            }
+                            HorizontalLayout {
+                                padding-left: 10px;
+                                padding-right: 4px;
+                                spacing: 8px;
 
-                            IconButton {
-                                glyph: Glyph.eye;
-                                label: item.on ? I18n.t1("clipInspector.bypass", "\{item.name}") : I18n.t1("clipInspector.enable", "\{item.name}");
-                                checked: item.on;
-                                clicked => { root.toggle(index); }
-                            }
+                                VerticalLayout {
+                                    alignment: center;
+                                    // The switch flips itself on a click, which
+                                    // ends a binding; it is set again whenever
+                                    // the document says otherwise - an undo.
+                                    switch := Switch {
+                                        property <bool> held: item.on;
+                                        checked: self.held;
+                                        changed held => { self.checked = self.held; }
+                                        toggled(on) => { root.toggle(index); }
+                                    }
+                                }
 
-                            IconButton {
-                                glyph: Glyph.chevron-up;
-                                label: I18n.t1("clipInspector.moveUp", "\{item.name}");
-                                enabled: index > 0;
-                                clicked => { root.move-by(index, -1); }
-                            }
+                                Text {
+                                    horizontal-stretch: 1;
+                                    text: item.name;
+                                    color: !item.known ? Theme.fg-dim
+                                        : item.on ? Theme.fg : Theme.fg-muted;
+                                    font-size: Theme.fs;
+                                    font-weight: Theme.weight-title;
+                                    vertical-alignment: center;
+                                    overflow: elide;
+                                }
 
-                            IconButton {
-                                glyph: Glyph.chevron-down;
-                                label: I18n.t1("clipInspector.moveDown", "\{item.name}");
-                                enabled: index < root.applied.length - 1;
-                                clicked => { root.move-by(index, 1); }
-                            }
+                                if !item.known: Text {
+                                    text: I18n.t("clipInspector.notInstalled");
+                                    color: Theme.fg-dim;
+                                    font-size: Theme.fs-xs;
+                                    vertical-alignment: center;
+                                }
 
-                            IconButton {
-                                glyph: Glyph.close;
-                                label: I18n.t1("clipInspector.remove", "\{item.name}");
-                                clicked => { root.remove(index); }
+                                // Order and removal stay quiet beside the
+                                // name; a chain of one has no order.
+                                if root.applied.length > 1: IconButton {
+                                    glyph: Glyph.chevron-up;
+                                    label: I18n.t1("clipInspector.moveUp", "\{item.name}");
+                                    enabled: index > 0;
+                                    idle: Theme.fg-dim;
+                                    clicked => { root.move-by(index, -1); }
+                                }
+
+                                if root.applied.length > 1: IconButton {
+                                    glyph: Glyph.chevron-down;
+                                    label: I18n.t1("clipInspector.moveDown", "\{item.name}");
+                                    enabled: index < root.applied.length - 1;
+                                    idle: Theme.fg-dim;
+                                    clicked => { root.move-by(index, 1); }
+                                }
+
+                                IconButton {
+                                    glyph: Glyph.trash;
+                                    label: I18n.t1("clipInspector.remove", "\{item.name}");
+                                    idle: Theme.fg-dim;
+                                    danger: true;
+                                    clicked => { root.remove(index); }
+                                }
+
+                                VerticalLayout {
+                                    alignment: center;
+                                    Icon {
+                                        glyph: link.open ? Glyph.chevron-down : Glyph.chevron-right;
+                                        size: 12px;
+                                        tint: Theme.fg-dim;
+                                    }
+                                }
+                                Rectangle { width: 4px; }
                             }
+                        }
+
+                        if link.open && item.known: Rectangle {
+                            height: 1px;
+                            background: Theme.line;
                         }
 
                         // One control per parameter the package declares. The
@@ -392,11 +444,16 @@ export component PresetStack inherits VerticalLayout {
                     // never shows a number that is not the document's.
                     for p in root.params: Rectangle {
                             property <AppliedParamData> data: p;
-                            visible: p.entry == index;
-                            height: p.entry == index ? knob.preferred-height : 0;
+                            visible: link.open && p.entry == index;
+                            height: link.open && p.entry == index ? knob.preferred-height : 0;
+                            opacity: item.on ? 1.0 : 0.5;
                             changed data => { knob.value = self.data.value; }
 
                             knob := Param {
+                                // A slider and the number, rather than the
+                                // number alone: an effect is dialled by eye.
+                                rail: true;
+                                // CapyCut: a batch edit says so in the label.
                                 label: p.mixed ? p.label + " (mixed)" : p.label;
                                 value: p.value;
                                 minimum: p.min;
@@ -430,8 +487,8 @@ export component PresetStack inherits VerticalLayout {
                         // The link's colours: a swatch that opens the
                         // picker, and the hex, typed as well as read.
                         for c in root.colours: Rectangle {
-                            visible: c.entry == index;
-                            height: c.entry == index ? swatch.preferred-height : 0;
+                            visible: link.open && c.entry == index;
+                            height: link.open && c.entry == index ? swatch.preferred-height : 0;
 
                             swatch := ColourField {
                                 label: c.label;
@@ -446,8 +503,8 @@ export component PresetStack inherits VerticalLayout {
 
                         // The link's wheels, three in a row, and its curves.
                         for g in root.wheel-groups: Rectangle {
-                            visible: g.entry == index;
-                            height: g.entry == index ? trio.preferred-height : 0;
+                            visible: link.open && g.entry == index;
+                            height: link.open && g.entry == index ? trio.preferred-height : 0;
 
                             trio := HorizontalLayout {
                                 padding-left: Theme.pad;
@@ -470,8 +527,8 @@ export component PresetStack inherits VerticalLayout {
                             }
                         }
                         for g in root.curve-groups: Rectangle {
-                            visible: g.entry == index;
-                            height: g.entry == index ? graph.preferred-height : 0;
+                            visible: link.open && g.entry == index;
+                            height: link.open && g.entry == index ? graph.preferred-height : 0;
 
                             graph := CurveEditor {
                                 padding-left: Theme.pad;
@@ -491,6 +548,11 @@ export component PresetStack inherits VerticalLayout {
                     }
                 }
             }
+        }
+
+        // A breath between the section's title and its search.
+        if root.library: Rectangle {
+            height: 6px;
         }
 
         if root.library: Row {
@@ -519,24 +581,84 @@ export component PresetStack inherits VerticalLayout {
         // than a segment inside it, and it takes the strip's place when it
         // is on because a shelf inside a starred set is a filter of a filter
         // nobody asked for.
-        if root.library: Row {
+        if root.library: HorizontalLayout {
+            padding-left: root.pad;
+            padding-right: root.pad;
+            spacing: 6px;
+            height: 26px;
+
             StarChip {
                 on: root.favourites-only;
                 clicked => { Library.favourites-changed(root.shelf, !root.favourites-only); }
             }
 
-            if !root.favourites-only: SegmentedControl {
-                options: root.group-labels;
-                current: root.group;
-                changed(index) => { Library.group-changed(root.shelf, index); }
+            // The shelves as pills on the panel, the Library pane's way,
+            // rather than a dark segmented track: picking one also leaves
+            // the starred set, since a shelf is a different question. All
+            // leads them, and is where a library opens.
+            for label[i] in [I18n.t("common.all")]: Rectangle {
+                property <bool> picked: !root.favourites-only && root.group == -1;
+                border-radius: 13px;
+                background: self.picked ? Theme.accent
+                    : all-touch.has-hover ? Theme.field-hover : Theme.field;
+                min-width: all-text.preferred-width + 20px;
+                horizontal-stretch: 0;
+
+                animate background { duration: 120ms; easing: cubic-bezier(0.4, 0, 0.2, 1); }
+
+                all-text := Text {
+                    text: label;
+                    color: parent.picked ? Theme.on-accent
+                        : all-touch.has-hover ? Theme.fg : Theme.fg-muted;
+                    font-size: Theme.fs-sm;
+                    font-weight: parent.picked ? Theme.weight-title : 400;
+                    vertical-alignment: center;
+                    horizontal-alignment: center;
+                }
+
+                all-touch := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => {
+                        if (root.favourites-only) {
+                            Library.favourites-changed(root.shelf, false);
+                        }
+                        Library.group-changed(root.shelf, -1);
+                    }
+                }
             }
 
-            if root.favourites-only: Text {
-                vertical-alignment: center;
-                text: I18n.t("clipInspector.favourites");
-                color: Theme.fg-muted;
-                font-size: Theme.fs;
+            for label[i] in root.group-labels: Rectangle {
+                property <bool> picked: !root.favourites-only && root.group == i;
+                border-radius: 13px;
+                background: self.picked ? Theme.accent
+                    : pill-touch.has-hover ? Theme.field-hover : Theme.field;
+                min-width: pill-text.preferred-width + 20px;
+                horizontal-stretch: 0;
+
+                animate background { duration: 120ms; easing: cubic-bezier(0.4, 0, 0.2, 1); }
+
+                pill-text := Text {
+                    text: label;
+                    color: parent.picked ? Theme.on-accent
+                        : pill-touch.has-hover ? Theme.fg : Theme.fg-muted;
+                    font-size: Theme.fs-sm;
+                    font-weight: parent.picked ? Theme.weight-title : 400;
+                    vertical-alignment: center;
+                    horizontal-alignment: center;
+                }
+
+                pill-touch := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => {
+                        if (root.favourites-only) {
+                            Library.favourites-changed(root.shelf, false);
+                        }
+                        Library.group-changed(root.shelf, i);
+                    }
+                }
             }
+
+            Rectangle { horizontal-stretch: 1; }
         }
 
         if root.library: Rectangle {
@@ -561,34 +683,63 @@ export component PresetStack inherits VerticalLayout {
                 y: floor(index / root.columns) * (root.cell-h + root.cell-gap);
                 width: root.cell-w;
                 height: root.cell-h;
-                border-radius: Theme.r-sm;
+                // Borderless surfaces rather than drawn boxes: the grid reads
+                // as one shelf, and the one on the clip is the one that
+                // stands out, tinted and outlined in the accent.
+                border-radius: Theme.r;
                 border-width: 1px;
-                border-color: tile.in-chain ? Theme.accent
-                    : tile-touch.has-hover ? Theme.line-strong
-                    : Theme.line;
+                border-color: tile.in-chain ? Theme.accent : Colors.transparent;
                 background: tile.in-chain ? Theme.accent-soft
-                    : tile-touch.has-hover ? Theme.field-hover
-                    : Theme.field;
+                    : tile-touch.has-hover ? Theme.field
+                    : Theme.raised;
 
                 animate background, border-color {
                     duration: 100ms;
                     easing: cubic-bezier(0.4, 0, 0.2, 1);
                 }
 
-                // The name, centred and given the whole cell: at this size a
-                // glyph would be a guess about what an effect looks like, and
-                // the word is the thing being chosen.
-                Text {
+                // A mark for the shelf it is on, over its name: what kind
+                // of change it makes, at a glance, while the word says
+                // which one.
+                VerticalLayout {
                     x: 4px;
                     width: parent.width - 8px;
-                    height: parent.height;
-                    text: entry.name;
-                    color: tile.in-chain ? Theme.accent : Theme.fg;
-                    font-size: Theme.fs-sm;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                    wrap: word-wrap;
-                    overflow: elide;
+                    alignment: center;
+                    spacing: 5px;
+
+                    HorizontalLayout {
+                        alignment: center;
+                        // The mark in a round badge of its own, which fills
+                        // with the accent once the effect is on the clip.
+                        Rectangle {
+                            width: 28px;
+                            height: 28px;
+                            border-radius: 14px;
+                            background: tile.in-chain ? Theme.accent
+                                : tile-touch.has-hover ? Theme.field-active : Theme.field;
+
+                            animate background { duration: 120ms; }
+
+                            Icon {
+                                glyph: tile.in-chain ? Glyph.check
+                                    : entry.category == "Voice" ? Glyph.mic
+                                    : entry.category == "Tone" ? Glyph.sliders
+                                    : entry.category == "Clean" ? Glyph.wand
+                                    : Glyph.waveform;
+                                size: 14px;
+                                tint: tile.in-chain ? Theme.on-accent
+                                    : tile-touch.has-hover ? Theme.fg : Theme.fg-muted;
+                            }
+                        }
+                    }
+
+                    Text {
+                        text: entry.name;
+                        color: tile.in-chain ? Theme.accent : Theme.fg;
+                        font-size: Theme.fs-sm;
+                        horizontal-alignment: center;
+                        overflow: elide;
+                    }
                 }
 
                 // The star rides the tile's corner and takes its own clicks,
@@ -2130,12 +2281,17 @@ export component EnhancePanel inherits VerticalLayout {
 /// clips rather than to either of them.
 export component TransitionPanel inherits VerticalLayout {
     in property <SelectedTransitionData> transition;
+    /// The package's own knobs, numbers and choices, as set on this cut.
+    in property <[AppliedParamData]> knobs;
+    in property <[TransitionChoiceData]> choices;
 
     /// Taken off, leaving a plain cut.
     callback remove();
     /// Set to a new length - clamped as applying one is, so this can never
     /// ask for more than the cut can give it.
     callback duration-set(seconds: float);
+    /// One of the package's knobs moved.
+    callback param-set(key: string, value: float);
 
     property <float> duration;
 
@@ -2196,6 +2352,43 @@ export component TransitionPanel inherits VerticalLayout {
                 default-value: 0.5;
                 fmt: ParamFormat.seconds2;
                 changed(v) => { root.duration-set(v); }
+            }
+
+            for choice in root.choices: VerticalLayout {
+                padding-left: Theme.pad;
+                padding-right: Theme.pad;
+                padding-top: 4px;
+                padding-bottom: 4px;
+                spacing: 4px;
+
+                Text {
+                    text: choice.label;
+                    color: Theme.fg-muted;
+                    font-size: Theme.fs-sm;
+                }
+                SegmentedControl {
+                    options: choice.options;
+                    current: choice.current;
+                    changed(index) => { root.param-set(choice.key, choice.values[index]); }
+                }
+            }
+
+            for p in root.knobs: Rectangle {
+                property <AppliedParamData> data: p;
+                height: knob.preferred-height;
+                changed data => { knob.value = self.data.value; }
+
+                knob := Param {
+                    unit: p.unit;
+                    label: p.label;
+                    value: p.value;
+                    minimum: p.min;
+                    maximum: p.max;
+                    step: p.step;
+                    default-value: p.default-value;
+                    fmt: p.fmt;
+                    changed(v) => { root.param-set(p.key, v); }
+                }
             }
         }
     }
@@ -2435,9 +2628,9 @@ export component AudioPanel inherits VerticalLayout {
     }
 }
 
-/// Speed: the rate, and only the rate. Speed that changes over the clip is
-/// the keyframes' job; whether the sound's pitch follows the rate is the
-/// Audio tab's.
+/// Speed: one rate for the whole clip, or a curve - speed that changes over
+/// the clip, shaped on a graph or picked from a preset (see
+/// speed-ramp.slint). Whether the sound's pitch follows is the Audio tab's.
 export component SpeedPanel inherits VerticalLayout {
     in property <SelectedClipData> selected;
     /// The panel's first section, with no hairline above it; false where
@@ -2448,16 +2641,35 @@ export component SpeedPanel inherits VerticalLayout {
     callback commit();
 
     property <float> speed;
-    function seed() { root.speed = root.selected.speed; }
+    function seed() {
+        root.speed = root.selected.speed;
+        root.fastest = SpeedRamp.fastest;
+        root.slowest = SpeedRamp.slowest;
+    }
     init => { root.seed(); }
     changed selected => { root.seed(); }
+
+    // Rust's word on the mode and the preset.
+    property <bool> curved: SpeedRamp.curved;
+    property <int> preset: SpeedRamp.preset;
+    // The two sliders' values, seeded from Rust's like the rate's: a
+    // slider writes its own value as it is dragged, which would end a
+    // binding.
+    property <float> fastest;
+    property <float> slowest;
+    property <float> fastest-truth: SpeedRamp.fastest;
+    property <float> slowest-truth: SpeedRamp.slowest;
+    changed fastest-truth => { root.fastest = root.fastest-truth; }
+    changed slowest-truth => { root.slowest = root.slowest-truth; }
 
     Section {
         first: root.first;
         speed := SectionHeader {
             title: I18n.t("common.speed");
             collapsible: true;
-            summary: InspectorFmt.format(ParamFormat.rate, root.speed);
+            summary: root.curved
+                ? I18n.t("speedRamp.curve")
+                : InspectorFmt.format(ParamFormat.rate, root.speed);
             HelpButton {
                 text: I18n.t("clipInspector.rateReTimesClip");
             }
@@ -2468,7 +2680,99 @@ export component SpeedPanel inherits VerticalLayout {
                 progress: root.selected.reverse-progress;
             }
 
-            Param {
+            HorizontalLayout {
+                padding-left: Theme.pad;
+                padding-right: Theme.pad;
+
+                SegmentedControl {
+                    // A press assigns `current` inside the control, which
+                    // ends a plain binding: so it is set again from Rust's
+                    // word whenever the selection or an undo changes it.
+                    property <bool> truth: root.curved;
+                    changed truth => { self.current = self.truth ? 1 : 0; }
+
+                    options: [I18n.t("speedRamp.constant"), I18n.t("speedRamp.curve")];
+                    current: root.curved ? 1 : 0;
+                    changed(index) => {
+                        SpeedRamp.curve(index == 1);
+                        root.commit();
+                    }
+                }
+            }
+
+            if root.curved: Row {
+                label: I18n.t("speedRamp.shape");
+                Select {
+                    // As the mode's: a pick ends the binding, Rust restores it.
+                    property <int> truth: root.preset;
+                    changed truth => { self.current = self.truth; }
+
+                    options: SpeedRamp.presets;
+                    current: root.preset;
+                    placeholder: I18n.t("speedRamp.custom");
+                    changed(index) => {
+                        SpeedRamp.preset-chosen(index);
+                        root.commit();
+                    }
+                }
+            }
+
+            if root.curved: SpeedGraph {
+                padding-left: Theme.pad;
+                padding-right: Theme.pad;
+                point(index, x, y) => {
+                    SpeedRamp.point(index, x, y);
+                    root.commit();
+                }
+                remove(index) => {
+                    SpeedRamp.remove(index);
+                    root.commit();
+                }
+            }
+
+            if root.curved: Row {
+                label: I18n.t("speedRamp.bends");
+                SegmentedControl {
+                    // As the mode's: set again from Rust's word.
+                    property <bool> truth: SpeedRamp.smooth;
+                    changed truth => { self.current = self.truth ? 0 : 1; }
+
+                    options: [I18n.t("speedRamp.smooth"), I18n.t("speedRamp.straight")];
+                    current: SpeedRamp.smooth ? 0 : 1;
+                    changed(index) => {
+                        SpeedRamp.smoothness(index == 0);
+                        root.commit();
+                    }
+                }
+            }
+
+            // The two extremes, for a ramp that is right in shape and too
+            // much or too little in strength: the fastest stretch brought
+            // down to 4x brings the rest of it along.
+            if root.curved && root.fastest > 0: Param {
+                label: I18n.t("speedRamp.fastest");
+                value <=> root.fastest;
+                minimum: 1.1;
+                maximum: 16;
+                step: 0.05;
+                default-value: 2;
+                fmt: ParamFormat.rate;
+                unit: "x";
+                changed(v) => { SpeedRamp.extreme(true, v); root.commit(); }
+            }
+            if root.curved && root.slowest > 0: Param {
+                label: I18n.t("speedRamp.slowest");
+                value <=> root.slowest;
+                minimum: 0.0625;
+                maximum: 0.9;
+                step: 0.01;
+                default-value: 0.5;
+                fmt: ParamFormat.rate;
+                unit: "x";
+                changed(v) => { SpeedRamp.extreme(false, v); root.commit(); }
+            }
+
+            if !root.curved: Param {
                 label: I18n.t("common.rate");
                 value <=> root.speed;
                 // The engine's full range. The track is linear, so the
@@ -2620,6 +2924,9 @@ export component AdjustPanel inherits VerticalLayout {
 // beats a second that means it only on this one.
 export component FilterPanel inherits VerticalLayout {
     in property <SelectedClipData> selected;
+    /// What the help says the layer does: a picture layer's or a sound
+    /// layer's, the panel being the same for both.
+    in property <string> help: I18n.t("clipInspector.layerTreatsEverythingUnder");
 
     callback set(field: ClipField, value: float);
     callback commit();
@@ -2649,7 +2956,7 @@ export component FilterPanel inherits VerticalLayout {
             collapsible: true;
             summary: InspectorFmt.format(ParamFormat.fraction, root.strength);
             HelpButton {
-                text: I18n.t("clipInspector.layerTreatsEverythingUnder");
+                text: root.help;
             }
         }
 

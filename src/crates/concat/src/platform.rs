@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// SPDX-FileCopyrightText: 2026 Jareer and Concat contributors
+// SPDX-FileCopyrightText: 2026 Jareer Abdullah and Concat contributors
 
 //! What the window asks of the platform it runs on.
 //!
@@ -63,6 +63,14 @@ pub fn apply_ui_scale(window: &slint::Window) {
         return;
     }
     let Some(native) = window.with_winit_window(|winit| winit.scale_factor()) else {
+        // Not up yet, as at startup: try again shortly, a few times over,
+        // or the chosen scale waits for the next pick in Settings (#462).
+        static TRIES: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+        if TRIES.fetch_add(1, std::sync::atomic::Ordering::Relaxed) < 40 {
+            reapply_ui_scale(std::time::Duration::from_millis(50));
+        } else {
+            log::warn!("interface scale: no window to scale; giving up");
+        }
         return;
     };
     let percent = UI_SCALE.load(std::sync::atomic::Ordering::Relaxed);
@@ -93,8 +101,8 @@ pub fn apply_ui_scale(_window: &slint::Window) {}
 /// Slint applies a display's own scale as it handles the event, and the
 /// chosen percent goes on top of that afterwards.
 #[cfg(not(target_os = "android"))]
-fn reapply_ui_scale() {
-    slint::Timer::single_shot(std::time::Duration::ZERO, || {
+fn reapply_ui_scale(delay: std::time::Duration) {
+    slint::Timer::single_shot(delay, || {
         crate::host::Shell::with(|_, app| {
             apply_ui_scale(slint::ComponentHandle::window(&app));
         });
@@ -141,6 +149,12 @@ struct DropHandler {
     /// says where it moved, and a press says only that it happened.
     cursor: Option<(f32, f32)>,
     on_pressed_away: Box<dyn Fn()>,
+    /// The window came back to the front: the moment a person returns from
+    /// moving a file, and the one where a file that went missing can be
+    /// noticed. See `Studio::check_missing_media`.
+    on_focused: Box<dyn Fn()>,
+    /// The event loop is ending, by any road: see `start` in lib.rs.
+    on_exiting: Box<dyn Fn()>,
     /// Whether this window draws its own resize edges: Linux, undecorated.
     edges: bool,
     /// The edge the pointer is on, while it is on one.
@@ -195,6 +209,8 @@ impl DropHandler {
     fn new(
         on_dropped: impl Fn(Vec<PathBuf>) + 'static,
         on_pressed_away: impl Fn() + 'static,
+        on_focused: impl Fn() + 'static,
+        on_exiting: impl Fn() + 'static,
     ) -> Self {
         Self {
             pending: Vec::new(),
@@ -205,6 +221,8 @@ impl DropHandler {
             fitted: false,
             cursor: None,
             on_pressed_away: Box::new(on_pressed_away),
+            on_focused: Box::new(on_focused),
+            on_exiting: Box::new(on_exiting),
             edges: cfg!(not(any(
                 target_os = "macos",
                 target_os = "windows",
@@ -265,8 +283,12 @@ impl CustomApplicationHandler for DropHandler {
             self.wayland = listen_for_wayland_drops(window, &self.arrived);
         }
         match event {
-            WindowEvent::ScaleFactorChanged { .. } => reapply_ui_scale(),
+            WindowEvent::ScaleFactorChanged { .. } => reapply_ui_scale(std::time::Duration::ZERO),
             WindowEvent::DroppedFile(path) => self.pending.push(path.clone()),
+            // Back at the front, after Explorer or the file manager: what a
+            // dropped file is to an import, a return is to a look for one
+            // that went away while the window was open.
+            WindowEvent::Focused(true) => (self.on_focused)(),
             WindowEvent::CursorMoved { position, .. } => {
                 let scale = slint_window
                     .map(|window| f64::from(window.scale_factor()))
@@ -338,6 +360,7 @@ impl CustomApplicationHandler for DropHandler {
     fn exiting(&mut self, _event_loop: &ActiveEventLoop) -> EventResult {
         // Before winit closes its display, which the listener reads.
         self.wayland = None;
+        (self.on_exiting)();
         EventResult::Propagate
     }
 }
@@ -399,41 +422,52 @@ pub fn phone() -> bool {
 /// a file manager - batched into one call per drag. It is taken here,
 /// before the window exists, because the backend - and the hook into its
 /// event loop that OS drops arrive through - has to be selected before
-/// anything is built on top of it; see [`DropHandler`].
+/// anything is built on top of it; see [`DropHandler`]. `on_focused` fires
+/// the same way each time the window is brought back to the front.
 #[cfg(not(target_os = "android"))]
 pub fn select_backend(
     on_files_dropped: impl Fn(Vec<PathBuf>) + 'static,
     on_pressed_away: impl Fn() + 'static,
+    on_focused: impl Fn() + 'static,
+    on_exiting: impl Fn() + 'static,
 ) -> Result<Option<Gpu>, PlatformError> {
     // The device the renderer and the monitor share. Taken first, because
     // the backend is selected with it.
-    let gpu = Gpu::acquire();
-    match &gpu {
-        None => log::warn!("no GPU adapter; the monitor composites on the CPU"),
-        // A software adapter is refused by Slint's selector unless this
-        // variable says otherwise: it enumerates the adapters on the instance
-        // it was handed, finds none that is a GPU, and `select` fails with
-        // "no GPU-backed WGPU adapter is available". From a double-clicked
-        // GUI build that failure went to a console nobody could see, and the
-        // app just never appeared. Setting it here is what the reporter did
-        // by hand, and the window, the editing and the export all worked on
-        // WARP - so the app does it for them and says so in the log.
-        // https://github.com/jub0t/Concat/issues/135
-        Some(gpu) if gpu.is_software() => {
-            log::warn!("the GPU adapter is a software rasteriser; the window will render slowly");
-            // SAFETY: the process is single-threaded at this point - the
-            // backend, the engine's threads and the window all come after
-            // this function - so nothing reads the environment concurrently.
-            unsafe { std::env::set_var("SLINT_WGPU_CPU", "1") };
-        }
-        Some(_) => {}
+    let mut gpu = Gpu::acquire();
+    // A software adapter is not shared. Skia drew the window through
+    // Direct3D 12 on WARP, and the monitor composited on the same device:
+    // when WARP removed it (0x887A0005, as a clip went onto the timeline),
+    // wgpu panicked in its own queue and took the window, the project and
+    // the export with it (#480, #503). Skia's own CPU rasteriser draws the
+    // window instead - with no device to lose, and faster than Skia's GPU
+    // path run on a CPU - and the monitor composites on a device of its
+    // own, on the software adapter too (CONCAT_GPU, which the compositor
+    // reads), handing the window pixels as it does with no GPU at all.
+    let software = gpu.as_ref().is_some_and(Gpu::is_software);
+    if software {
+        log::warn!(
+            "the GPU adapter is a software rasteriser; the window draws on the CPU and the monitor on a device of its own"
+        );
+        // SAFETY: the process is single-threaded at this point - the
+        // backend, the engine's threads and the window all come after
+        // this function - so nothing reads the environment concurrently.
+        unsafe { std::env::set_var("CONCAT_GPU", "software") };
+        gpu = None;
+    } else if gpu.is_none() {
+        log::warn!("no GPU adapter; the monitor composites on the CPU");
     }
 
     let mut selector = slint::BackendSelector::new()
         .backend_name("winit".into())
-        .with_winit_custom_application_handler(DropHandler::new(on_files_dropped, on_pressed_away));
+        .with_winit_custom_application_handler(DropHandler::new(
+            on_files_dropped,
+            on_pressed_away,
+            on_focused,
+            on_exiting,
+        ));
     selector = match &gpu {
         Some(gpu) => selector.require_wgpu_30(gpu.configuration()),
+        None if software => selector.renderer_name("skia-software".into()),
         None => {
             // Without a shared device, ask for the platform's own API by
             // name: Skia picks its surface from a cfg chain, and requiring
@@ -640,6 +674,11 @@ pub fn select_backend(
     // Android has no pointer to press away with; the screen's own keyboard
     // dismisses, and the field goes with it.
     _on_pressed_away: impl Fn() + 'static,
+    // Nor a window that loses and regains the front: the activity owns the
+    // screen, and a file comes back through the picker.
+    _on_focused: impl Fn() + 'static,
+    // Nor a desktop event loop whose end this hook watches.
+    _on_exiting: impl Fn() + 'static,
 ) -> Result<Option<Gpu>, PlatformError> {
     let _ = on_files_dropped;
     Ok(None)
@@ -779,9 +818,8 @@ fn media_kind(extension: &str) -> Option<MediaKind> {
         "mp3" | "wav" | "aac" | "m4a" | "flac" | "ogg" | "opus" | "aif" | "aiff" => {
             Some(MediaKind::Audio)
         }
-        "png" | "jpg" | "jpeg" | "webp" | "gif" | "bmp" | "tif" | "tiff" | "heic" | "heif" => {
-            Some(MediaKind::Image)
-        }
+        "png" | "jpg" | "jpeg" | "webp" | "gif" | "bmp" | "tif" | "tiff" | "heic" | "heif"
+        | "svg" | "svgz" => Some(MediaKind::Image),
         _ => None,
     }
 }

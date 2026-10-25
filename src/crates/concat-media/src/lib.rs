@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// SPDX-FileCopyrightText: 2026 Jareer and Concat contributors
+// SPDX-FileCopyrightText: 2026 Jareer Abdullah and Concat contributors
 
 //! Media IO: reading frames and samples out of files and writing them back.
 //!
@@ -26,6 +26,7 @@ pub mod prefetch;
 pub mod probe;
 pub mod samples;
 pub mod silence;
+pub mod svg;
 pub mod treat;
 
 pub use decode::{ColorRange, ColorSignal, DecodeOptions, Decoder, FrameSource, SeekableSource};

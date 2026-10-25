@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// SPDX-FileCopyrightText: 2026 Jareer and Concat contributors
+// SPDX-FileCopyrightText: 2026 Jareer Abdullah and Concat contributors
 
 //! Flattening a project document into the exporter's clip list.
 //!
@@ -87,6 +87,23 @@ pub fn flatten_timeline_in(
                 });
             }
 
+            // A sound layer: no file and no picture, a chain over the mix
+            // for its span, its opacity the strength and its fades the
+            // ramps, silent with its lane.
+            if clip.kind == ModelClipKind::SoundLayer {
+                return Some(ExportClip {
+                    hidden: true,
+                    muted: track.muted || clip.muted == Some(true),
+                    volume: 0.0,
+                    fade_in: clip.fade_in,
+                    fade_out: clip.fade_out,
+                    filter_chain: audio_filter_chain(&clip.filters),
+                    opacity: clip.opacity,
+                    has_audio: Some(false),
+                    ..ExportClip::blank(ClipKind::SoundLayer, clip.start, clip.duration, index)
+                });
+            }
+
             let media = project.media.iter().find(|item| item.id == clip.media_id)?;
 
             let kind = match clip.kind {
@@ -95,7 +112,10 @@ pub fn flatten_timeline_in(
                 ModelClipKind::Image => ClipKind::Image,
                 // Handled above; unreachable spelled as a skip so a new
                 // kind fails soft.
-                ModelClipKind::Text | ModelClipKind::Layer | ModelClipKind::Shape => return None,
+                ModelClipKind::Text
+                | ModelClipKind::Layer
+                | ModelClipKind::SoundLayer
+                | ModelClipKind::Shape => return None,
             };
             Some(ExportClip {
                 path: media.path.clone(),
@@ -116,6 +136,14 @@ pub fn flatten_timeline_in(
                     .unwrap_or(&[])
                     .iter()
                     .map(|point| (point.at, point.speed))
+                    .collect(),
+                speed_slopes: clip
+                    .speed_curve
+                    .as_deref()
+                    .filter(|points| concat_project::speed::is_smooth(points))
+                    .unwrap_or(&[])
+                    .iter()
+                    .filter_map(|point| point.slope)
                     .collect(),
                 animation: export_keys(clip),
                 flip_h: clip.flip_h,
@@ -144,6 +172,7 @@ pub fn flatten_timeline_in(
                     .map(|transition| TransitionSpec {
                         kind: transition.id.clone(),
                         duration: transition.duration,
+                        params: transition.params.clone(),
                     }),
                 media_width: media.width,
                 media_height: media.height,

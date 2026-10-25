@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// SPDX-FileCopyrightText: 2026 Jareer and Concat contributors
+// SPDX-FileCopyrightText: 2026 Jareer Abdullah and Concat contributors
 
 //! The Model Context Protocol over a pair of streams: newline-delimited
 //! JSON-RPC 2.0, one message a line, as the stdio transport has it.
@@ -152,11 +152,23 @@ fn read(
 ) {
     let mut input = input;
     loop {
-        let mut line = String::new();
-        match std::io::Read::take(&mut input, MAX_LINE).read_line(&mut line) {
+        let mut bytes = Vec::new();
+        match std::io::Read::take(&mut input, MAX_LINE).read_until(b'\n', &mut bytes) {
             Ok(0) | Err(_) => return,
             Ok(_) => {}
         }
+        // JSON is UTF-8. A line that is not is that line's mistake, not the
+        // end of the session: `read_line` would fail the read itself and
+        // stop the server here without a word.
+        let Ok(line) = String::from_utf8(bytes) else {
+            output.send(&failure(
+                Value::Null,
+                code::PARSE,
+                "not JSON: the line is not UTF-8",
+                None,
+            ));
+            continue;
+        };
         if line.trim().is_empty() {
             continue;
         }
@@ -249,6 +261,17 @@ fn success(id: &Value, mut result: Value, params: &Value) -> Value {
         }
     }
     json!({ "jsonrpc": "2.0", "id": id, "result": result })
+}
+
+/// The caching hints 2026-07-28 requires on these results.
+fn cacheable(mut reply: Value) -> Value {
+    if let Some(result) = reply.get_mut("result").and_then(Value::as_object_mut)
+        && result.get("resultType") == Some(&json!("complete"))
+    {
+        result.insert("ttlMs".to_owned(), json!(0));
+        result.insert("cacheScope".to_owned(), json!("public"));
+    }
+    reply
 }
 
 fn failure(id: Value, code: i64, message: &str, data: Option<Value>) -> Value {
@@ -361,9 +384,9 @@ impl Server {
                 result["_meta"] = Value::Object(meta);
                 let mut reply = success(id, result, params);
                 reply["result"]["resultType"] = json!("complete");
-                reply
+                cacheable(reply)
             }
-            "tools/list" => success(id, json!({ "tools": self.toolbox.list() }), params),
+            "tools/list" => cacheable(success(id, json!({ "tools": self.toolbox.list() }), params)),
             "tools/call" => self.call(id, params, backend, cancelled),
             _ => failure(
                 id.clone(),
@@ -448,5 +471,65 @@ impl Server {
                 None,
             ),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use concat_api::{ApiError, Request};
+    use std::io::Cursor;
+
+    /// A backend that answers every request with an empty object.
+    struct Idle;
+
+    impl Backend for Idle {
+        fn call(&mut self, _request: Request) -> Result<Value, ApiError> {
+            Ok(json!({}))
+        }
+
+        fn describe(&self) -> Value {
+            json!({ "mode": "test" })
+        }
+    }
+
+    /// A writer whose bytes the test can read after `serve` has returned.
+    #[derive(Clone, Default)]
+    struct Shared(Arc<Mutex<Vec<u8>>>);
+
+    impl Write for Shared {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().expect("lock").extend_from_slice(bytes);
+            Ok(bytes.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    /// Serves `input` to its end and returns every line written.
+    fn serve_bytes(input: &[u8]) -> Vec<Value> {
+        let written = Shared::default();
+        serve(Cursor::new(input.to_vec()), written.clone(), Box::new(Idle));
+        let bytes = written.0.lock().expect("lock").clone();
+        String::from_utf8(bytes)
+            .expect("the server writes UTF-8")
+            .lines()
+            .map(|line| serde_json::from_str(line).expect("each line is JSON"))
+            .collect()
+    }
+
+    #[test]
+    fn a_line_that_is_not_utf8_is_refused_and_the_session_goes_on() {
+        let mut input = b"\xff\xfe not text\n".to_vec();
+        input.extend_from_slice(br#"{"jsonrpc":"2.0","id":1,"method":"ping"}"#);
+        input.push(b'\n');
+        let replies = serve_bytes(&input);
+        assert_eq!(replies.len(), 2, "{replies:?}");
+        assert_eq!(replies[0]["error"]["code"], code::PARSE);
+        assert_eq!(replies[0]["id"], Value::Null);
+        assert_eq!(replies[1]["id"], 1);
+        assert!(replies[1]["result"].is_object());
     }
 }

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// SPDX-FileCopyrightText: 2026 Jareer and Concat contributors
+// SPDX-FileCopyrightText: 2026 Jareer Abdullah and Concat contributors
 
 //! The GPU compositor against the CPU reference: the same plans, and the
 //! pictures must agree. Every test skips on a machine without an adapter,
@@ -778,6 +778,90 @@ fn every_packaged_transition_combines_across_its_progress_range() {
                 });
         }
     }
+}
+
+/// Halfway through, every packaged transition but the plain dissolves draws
+/// something a dissolve does not: "all the transitions look the same, just
+/// a fade" (#448) is a shader that compiled and ran and drew the mix
+/// anyway. Over two busy pictures, so a slide or a zoom moves something.
+#[test]
+fn halfway_through_a_packaged_transition_is_not_a_dissolve() {
+    let Some(mut gpu) = gpu() else { return };
+    let (width, height) = (64, 36);
+    let from = gradient(width, height);
+    let mut to = Frame::transparent(width, height);
+    for y in 0..height {
+        for x in 0..width {
+            let on = (x / 8 + y / 8) % 2 == 0;
+            to.set_pixel(
+                x,
+                y,
+                if on {
+                    [240, 240, 40, 255]
+                } else {
+                    [20, 90, 200, 255]
+                },
+            );
+        }
+    }
+    let mix = crate::reference::mix_frames(&from, &to, 0.5);
+    let catalogue = concat_effects::Catalogue::builtin();
+    let mut report = Vec::new();
+    for package in catalogue.packages() {
+        if package.kind() != concat_effects::Kind::Transition {
+            continue;
+        }
+        let pass = catalogue
+            .transition_pass(package.id(), &Default::default(), 0.5)
+            .expect("a pass");
+        let out = gpu
+            .combine(width, height, 0.0, &from, &to, &pass)
+            .expect("combines");
+        let differs = out
+            .pixels()
+            .iter()
+            .zip(mix.pixels())
+            .map(|(a, b)| u32::from(a.abs_diff(*b)))
+            .sum::<u32>() as f64
+            / out.pixels().len() as f64;
+        report.push(format!("{} {differs:.2}", package.id()));
+        if !package.id().contains("dissolve") {
+            assert!(
+                differs > 2.0,
+                "{} is a dissolve halfway: {differs:.2}",
+                package.id()
+            );
+        }
+    }
+    eprintln!("{}", report.join("\n"));
+}
+
+/// A transition's knob, set on the cut, changes what the shader draws:
+/// Push to the right is not Push to the left.
+#[test]
+fn a_transitions_knob_changes_what_it_draws() {
+    let Some(mut gpu) = gpu() else { return };
+    let (width, height) = (64, 36);
+    let (from, to) = (
+        gradient(width, height),
+        solid(width, height, [30, 200, 60, 255]),
+    );
+    let catalogue = concat_effects::Catalogue::builtin();
+    let draw = |gpu: &mut WgpuCompositor, direction: f64| {
+        let params = BTreeMap::from([("direction".to_owned(), direction)]);
+        let pass = catalogue
+            .transition_pass("concat.push", &params, 0.5)
+            .expect("push has a pass");
+        gpu.combine(width, height, 0.0, &from, &to, &pass)
+            .expect("combines")
+    };
+    let left = draw(&mut gpu, 0.0);
+    let right = draw(&mut gpu, 1.0);
+    assert_ne!(
+        left.pixels(),
+        right.pixels(),
+        "the direction knob reached the shader"
+    );
 }
 
 /// A texture read back into a frame, for comparing a picture that stayed

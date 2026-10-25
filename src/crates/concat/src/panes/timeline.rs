@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// SPDX-FileCopyrightText: 2026 Jareer and Concat contributors
+// SPDX-FileCopyrightText: 2026 Jareer Abdullah and Concat contributors
 
 //! The timeline's view: where it is looking, how close, with which tool,
 //! and what the lanes know about a track that the document does not.
@@ -136,11 +136,12 @@ impl TimelinePane {
             TimelineMsg::SnapChanged(on) => self.snap = on,
             TimelineMsg::SnapToggled => self.snap = !self.snap,
             TimelineMsg::MagneticChanged(on) => {
-                studio.prefs.magnetic = on;
+                studio.prefs.set_magnetic(on);
                 studio.prefs.save(&studio.host.dirs);
             }
             TimelineMsg::MagneticToggled => {
-                studio.prefs.magnetic = !studio.prefs.magnetic;
+                let on = !studio.prefs.magnetic();
+                studio.prefs.set_magnetic(on);
                 studio.prefs.save(&studio.host.dirs);
             }
             TimelineMsg::TrimFollowChanged(on) => {

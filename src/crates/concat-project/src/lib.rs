@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// SPDX-FileCopyrightText: 2026 Jareer and Concat contributors
+// SPDX-FileCopyrightText: 2026 Jareer Abdullah and Concat contributors
 
 //! The edit itself, owned by the engine.
 //!
@@ -566,6 +566,58 @@ mod tests {
         );
     }
 
+    /// A clip made like another takes on every field but its place, and
+    /// the command cannot be sent from outside.
+    #[test]
+    fn a_matched_clip_takes_everything_but_its_place() {
+        let (mut editor, media_id, source_id) = fixture();
+        let track_id = editor.project().active().tracks[0].id.clone();
+        let mut like = editor
+            .project()
+            .active()
+            .clip(&source_id)
+            .expect("clip")
+            .clone();
+        like.mask = Some(crate::model::ClipMask::of(crate::model::MaskShape::Linear));
+        like.stabilize = Some(crate::model::Stabilize::default());
+        like.opacity = 0.4;
+        like.transition_in = Some(crate::model::Transition {
+            id: "concat.dissolve".to_owned(),
+            duration: 0.5,
+            params: Default::default(),
+        });
+        like.detached_from = Some("c99".to_owned());
+        like.start = 99.0;
+        let copy_id = editor
+            .apply(Command::AddClip {
+                media_id,
+                track_id,
+                start: 20.0,
+                ripple: false,
+            })
+            .expect("adds")
+            .created_id
+            .expect("id");
+        let applied = editor
+            .apply(Command::MatchClip {
+                clip_id: copy_id.clone(),
+                like: Box::new(like.clone()),
+            })
+            .expect("matches")
+            .applied;
+        assert!(applied);
+        let copy = editor.project().active().clip(&copy_id).expect("copy");
+        assert_eq!(copy.mask, like.mask);
+        assert_eq!(copy.stabilize, like.stabilize);
+        assert_eq!(copy.opacity, 0.4);
+        assert_eq!((copy.id.as_str(), copy.start), (copy_id.as_str(), 20.0));
+        assert_eq!(copy.transition_in, None, "its neighbours' business");
+        assert_eq!(copy.detached_from, None);
+
+        let wire = serde_json::json!({ "op": "matchClip", "clipId": copy_id, "like": {} });
+        assert!(serde_json::from_value::<Command>(wire).is_err());
+    }
+
     /// Editor with one media item and one clip at [0, 10) on track one.
     fn fixture() -> (Editor, String, String) {
         let mut editor = Editor::new();
@@ -795,6 +847,7 @@ mod tests {
         editor
             .apply(Command::SetClipSpeed {
                 clip_id: first,
+                ripple: false,
                 speed: 0.5,
             })
             .expect("retimes");
@@ -1469,6 +1522,7 @@ mod tests {
             .transition_in = Some(crate::model::Transition {
             id: "cross-fade".into(),
             duration: 0.4,
+            params: Default::default(),
         });
         assert!(
             crate::consolidation_clips(
@@ -1506,6 +1560,19 @@ mod tests {
         let mut editor = Editor::new();
         editor.apply(media("/a.mp4", 10.0, true)).expect("adds");
         editor.apply(media("/a.mp4", 10.0, true)).expect("no-op");
+        assert_eq!(editor.project().media.len(), 1);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_path_spelled_another_way_is_not_imported_twice_on_windows() {
+        let mut editor = Editor::new();
+        editor
+            .apply(media(r"C:\Videos\a.mp4", 10.0, true))
+            .expect("adds");
+        editor
+            .apply(media("c:/videos/A.mp4", 10.0, true))
+            .expect("no-op");
         assert_eq!(editor.project().media.len(), 1);
     }
 
@@ -1724,22 +1791,25 @@ mod tests {
     }
 
     /// A freeze cuts the clip the way a split does, so a curved clip has to
-    /// come out of it the way a split leaves one: both pieces at the curve's
-    /// constant mean, meeting at the frozen source time.
+    /// come out of it the way a split leaves one: each piece with its share
+    /// of the curve, meeting at the frozen source time.
     #[test]
     fn freeze_frame_on_a_curved_clip_keeps_the_pieces_continuous() {
         let (mut editor, _, clip_id) = fixture();
         editor
             .apply(Command::SetClipSpeedCurve {
                 clip_id: clip_id.clone(),
+                ripple: false,
                 curve: Some(vec![
                     crate::model::SpeedPoint {
                         at: 0.0,
                         speed: 0.5,
+                        slope: None,
                     },
                     crate::model::SpeedPoint {
                         at: 1.0,
                         speed: 2.0,
+                        slope: None,
                     },
                 ]),
             })
@@ -1778,16 +1848,224 @@ mod tests {
             .find(|clip| clip.id != clip_id && clip.id != freeze_id)
             .expect("tail");
         for piece in [head, tail] {
-            assert!(
-                piece.speed_curve.is_none(),
-                "a piece kept a curve its in-point was not computed for"
-            );
+            assert!(piece.speed_curve.is_some(), "a piece lost its ramp");
         }
-        assert_eq!(
-            head.source_start + head.duration * head.speed,
-            tail.source_start,
+        assert!(
+            (head.source_start + head.duration * head.speed - tail.source_start).abs() < 1e-9,
             "the tail picks up where the head ends"
         );
+    }
+
+    /// The fixture's ten-second clip under a ramp from half speed to double.
+    fn ramped() -> (Editor, String) {
+        let (mut editor, _, clip_id) = fixture();
+        editor
+            .apply(Command::SetClipSpeedCurve {
+                clip_id: clip_id.clone(),
+                ripple: false,
+                curve: Some(vec![
+                    crate::model::SpeedPoint {
+                        at: 0.0,
+                        speed: 0.5,
+                        slope: None,
+                    },
+                    crate::model::SpeedPoint {
+                        at: 1.0,
+                        speed: 2.0,
+                        slope: None,
+                    },
+                ]),
+            })
+            .expect("curves");
+        (editor, clip_id)
+    }
+
+    /// Source seconds `t` seconds into a placed clip, as the engine maps it.
+    fn source_at(clip: &crate::model::Clip, t: f64) -> f64 {
+        match clip.speed_curve.as_deref().and_then(crate::speed::curve_of) {
+            Some(curve) => clip.source_start + clip.duration * curve.consumed(t / clip.duration),
+            None => clip.source_start + t * clip.speed,
+        }
+    }
+
+    #[test]
+    fn a_split_ramp_plays_on_in_both_halves() {
+        let (mut editor, clip_id) = ramped();
+        let whole = editor.project().active().clip(&clip_id).unwrap().clone();
+        let cut = whole.duration * 0.3;
+        editor
+            .apply(Command::SplitClips {
+                clip_ids: vec![clip_id.clone()],
+                time: cut,
+            })
+            .expect("splits");
+        let clips = &editor.project().active().clips;
+        let (head, tail) = (&clips[0], &clips[1]);
+        assert!(head.speed_curve.is_some() && tail.speed_curve.is_some());
+        for t in [0.0, cut / 2.0, cut] {
+            assert!((source_at(head, t) - source_at(&whole, t)).abs() < 1e-9);
+        }
+        for t in [0.0, 1.0, tail.duration] {
+            assert!((source_at(tail, t) - source_at(&whole, cut + t)).abs() < 1e-9);
+        }
+    }
+
+    #[test]
+    fn trimming_a_ramp_cuts_it_rather_than_squeezing_it() {
+        let (mut editor, clip_id) = ramped();
+        let whole = editor.project().active().clip(&clip_id).unwrap().clone();
+        editor
+            .apply(Command::TrimClip {
+                clip_id: clip_id.clone(),
+                edge: TrimEdge::Start,
+                delta: 2.0,
+                ripple: false,
+            })
+            .expect("trims the head");
+        editor
+            .apply(Command::TrimClip {
+                clip_id: clip_id.clone(),
+                edge: TrimEdge::End,
+                delta: -1.0,
+                ripple: false,
+            })
+            .expect("trims the tail");
+        let trimmed = editor.project().active().clip(&clip_id).unwrap();
+        assert!((trimmed.start - 2.0).abs() < 1e-9);
+        // What is left plays exactly what that stretch played before.
+        for t in [0.0, 1.0, trimmed.duration] {
+            assert!((source_at(trimmed, t) - source_at(&whole, 2.0 + t)).abs() < 1e-9);
+        }
+    }
+
+    #[test]
+    fn a_ramp_that_slows_a_clip_moves_the_lane_along() {
+        let (mut editor, _, clip_id) = fixture();
+        let media_id = editor
+            .project()
+            .active()
+            .clip(&clip_id)
+            .unwrap()
+            .media_id
+            .clone();
+        let track_id = editor.project().active().tracks[0].id.clone();
+        let next = editor
+            .apply(Command::AddClip {
+                media_id,
+                track_id,
+                start: 10.0,
+                ripple: false,
+            })
+            .expect("adds")
+            .created_id
+            .expect("id");
+        editor
+            .apply(Command::SetClipSpeedCurve {
+                clip_id: clip_id.clone(),
+                ripple: false,
+                curve: Some(vec![
+                    crate::model::SpeedPoint {
+                        at: 0.0,
+                        speed: 1.0,
+                        slope: None,
+                    },
+                    crate::model::SpeedPoint {
+                        at: 0.5,
+                        speed: 0.25,
+                        slope: None,
+                    },
+                    crate::model::SpeedPoint {
+                        at: 1.0,
+                        speed: 1.0,
+                        slope: None,
+                    },
+                ]),
+            })
+            .expect("curves");
+        let timeline = editor.project().active();
+        let ramped = timeline.clip(&clip_id).unwrap();
+        let next = timeline.clip(&next).unwrap();
+        assert!(ramped.duration > 10.0, "the slow middle lengthens the clip");
+        assert!(
+            next.start >= ramped.start + ramped.duration - 1e-9,
+            "the clip after it is moved along, not covered"
+        );
+    }
+
+    #[test]
+    fn a_magnetic_speed_up_closes_the_lane_behind_it_and_a_plain_one_leaves_the_gap() {
+        for ripple in [true, false] {
+            let (mut editor, _, clip_id) = fixture();
+            let media_id = editor
+                .project()
+                .active()
+                .clip(&clip_id)
+                .unwrap()
+                .media_id
+                .clone();
+            let track_id = editor.project().active().tracks[0].id.clone();
+            let mut add = |start| {
+                editor
+                    .apply(Command::AddClip {
+                        media_id: media_id.clone(),
+                        track_id: track_id.clone(),
+                        start,
+                        ripple: false,
+                    })
+                    .expect("adds")
+                    .created_id
+                    .expect("id")
+            };
+            // One clip touching it, and one past a gap of its own.
+            let next = add(10.0);
+            let later = add(25.0);
+            let before = editor.project().clone();
+            editor
+                .apply(Command::SetClipSpeed {
+                    clip_id: clip_id.clone(),
+                    ripple,
+                    speed: 2.0,
+                })
+                .expect("speeds up");
+            editor
+                .apply(Command::SetClipSpeedCurve {
+                    clip_id: clip_id.clone(),
+                    ripple,
+                    curve: Some(vec![
+                        crate::model::SpeedPoint {
+                            at: 0.0,
+                            speed: 4.0,
+                            slope: Some(0.0),
+                        },
+                        crate::model::SpeedPoint {
+                            at: 1.0,
+                            speed: 1.0,
+                            slope: Some(0.0),
+                        },
+                    ]),
+                })
+                .expect("curves");
+            let timeline = editor.project().active();
+            let ramped = timeline.clip(&clip_id).unwrap();
+            let end = ramped.start + ramped.duration;
+            let (next, later) = (
+                timeline.clip(&next).unwrap().start,
+                timeline.clip(&later).unwrap().start,
+            );
+            assert!(end < 5.0, "the clip got shorter");
+            if ripple {
+                assert!((next - end).abs() < 1e-9, "the next clip closes up");
+                assert!(
+                    (later - next - 15.0).abs() < 1e-9,
+                    "a gap further down the lane is kept"
+                );
+            } else {
+                assert_eq!((next, later), (10.0, 25.0), "a plain retime leaves the gap");
+            }
+            assert!(editor.undo(), "undoes");
+            assert!(editor.undo(), "undoes");
+            assert_eq!(editor.project(), &before, "undo puts the lane back");
+        }
     }
 
     #[test]
@@ -1905,6 +2183,7 @@ mod tests {
         for command in [
             Command::SetClipSpeed {
                 clip_id: clip_id.clone(),
+                ripple: false,
                 speed: f64::NAN,
             },
             Command::SplitClips {
@@ -1948,6 +2227,7 @@ mod tests {
                 transition_in: Some(Some(crate::model::Transition {
                     id: "cross-fade".to_owned(),
                     duration: f64::NAN,
+                    params: Default::default(),
                 })),
                 ..Default::default()
             },
@@ -2602,6 +2882,7 @@ mod tests {
         editor
             .apply(Command::SetClipSpeed {
                 clip_id: clip_id.clone(),
+                ripple: false,
                 speed: 2.0,
             })
             .expect("ok");
@@ -2630,6 +2911,7 @@ mod tests {
         editor
             .apply(Command::SetClipSpeed {
                 clip_id: clip_id.clone(),
+                ripple: false,
                 speed: 100.0,
             })
             .expect("ok");
@@ -2637,6 +2919,7 @@ mod tests {
         editor
             .apply(Command::SetClipSpeed {
                 clip_id,
+                ripple: false,
                 speed: 0.0,
             })
             .expect("ok");
@@ -2930,6 +3213,7 @@ mod tests {
                     transition_in: Some(Some(crate::model::Transition {
                         id: "cross-fade".to_owned(),
                         duration: 1.5,
+                        params: Default::default(),
                     })),
                     ..ClipPatch::default()
                 },
@@ -3452,6 +3736,7 @@ mod tests {
                     },
                     Command::SetClipSpeed {
                         clip_id,
+                        ripple: false,
                         speed: 2.0,
                     },
                 ],
@@ -3702,6 +3987,7 @@ mod tests {
                 duration: Some(3.0),
                 effect_id: "concat.adjust".into(),
                 name: "Adjustment".into(),
+                sound: false,
             })
             .expect("adds")
             .created_id
@@ -3718,6 +4004,106 @@ mod tests {
             row(&layer.track_id) > row(&video_track),
             "the layer must sit over the footage, not under it"
         );
+    }
+
+    /// A sound layer carries its package on the sound's chain and none on
+    /// the picture's, lands over the footage as a picture layer does, is
+    /// written as a kind of its own and read back as one, and goes with an
+    /// undo.
+    #[test]
+    fn a_sound_layer_carries_an_audio_chain_and_round_trips() {
+        let mut editor = Editor::new();
+        let media_id = editor
+            .apply(media("/a.mp4", 10.0, true))
+            .expect("adds")
+            .created_id
+            .expect("id");
+        let video_track = editor.project().active().tracks[2].id.clone();
+        editor
+            .apply(Command::AddClip {
+                media_id,
+                track_id: video_track.clone(),
+                start: 0.0,
+                ripple: false,
+            })
+            .expect("adds");
+        let layer_id = editor
+            .apply(Command::AddLayerClip {
+                track_id: None,
+                start: 1.0,
+                duration: Some(3.0),
+                effect_id: "concat.telephone".into(),
+                name: "Telephone".into(),
+                sound: true,
+            })
+            .expect("adds")
+            .created_id
+            .expect("id");
+        let timeline = editor.project().active();
+        let layer = timeline.clip(&layer_id).expect("exists");
+        assert_eq!(layer.kind, ClipKind::SoundLayer);
+        assert_eq!(layer.media_id, "");
+        assert_eq!(layer.filters.len(), 1);
+        assert_eq!(layer.filters[0].id, "concat.telephone");
+        assert!(layer.video_effects.is_empty(), "nothing on the picture");
+        let row = |id: &str| timeline.tracks.iter().position(|t| t.id == id);
+        assert!(row(&layer.track_id) > row(&video_track));
+
+        let document = editor.to_document(&settings());
+        let written = document["timelines"][0]["clips"]
+            .as_array()
+            .expect("clips")
+            .iter()
+            .find(|clip| clip["id"] == layer_id.as_str())
+            .expect("written");
+        assert_eq!(written["kind"], "soundLayer");
+        let reopened = Editor::from_document(&document).expect("reads");
+        assert_eq!(
+            reopened.project().active().clip(&layer_id),
+            editor.project().active().clip(&layer_id),
+            "read back as it was written"
+        );
+
+        // A copy is laid as a layer and then made like the source, the way
+        // the window copies, pastes and duplicates one: kind, chain,
+        // strength and ramps all come with it.
+        let mut source = editor
+            .project()
+            .active()
+            .clip(&layer_id)
+            .expect("exists")
+            .clone();
+        source.filters[0].params.insert("drive".to_owned(), 6.0);
+        source.opacity = 0.5;
+        source.fade_in = 0.25;
+        let copy_id = editor
+            .apply(Command::AddLayerClip {
+                track_id: Some(source.track_id.clone()),
+                start: 4.0,
+                duration: Some(source.duration),
+                effect_id: source.filters[0].id.clone(),
+                name: source.name.clone(),
+                sound: true,
+            })
+            .expect("adds")
+            .created_id
+            .expect("id");
+        editor
+            .apply(Command::MatchClip {
+                clip_id: copy_id.clone(),
+                like: Box::new(source.clone()),
+            })
+            .expect("matches");
+        let copy = editor.project().active().clip(&copy_id).expect("exists");
+        assert_eq!(copy.kind, ClipKind::SoundLayer);
+        assert_eq!(copy.filters, source.filters);
+        assert_eq!((copy.opacity, copy.fade_in), (0.5, 0.25));
+        assert_eq!(copy.start, 4.0);
+
+        while editor.project().active().clip(&layer_id).is_some() {
+            assert!(editor.undo());
+        }
+        assert!(editor.project().active().clip(&copy_id).is_none());
     }
 
     #[test]
@@ -3917,6 +4303,7 @@ mod tests {
                     },
                     Command::SetClipSpeed {
                         clip_id,
+                        ripple: false,
                         speed: 2.0,
                     },
                 ],
@@ -4531,6 +4918,7 @@ mod tests {
             },
             Command::SetClipSpeed {
                 clip_id: "c1".to_owned(),
+                ripple: false,
                 speed: 2.0,
             },
             Command::SetClipTransform {
@@ -4904,6 +5292,7 @@ mod tests {
                     duration: Some(1.0),
                     effect_id: "concat.warm".into(),
                     name: name.into(),
+                    sound: false,
                 })
                 .expect("a layer");
         }

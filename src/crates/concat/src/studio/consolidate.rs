@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// SPDX-FileCopyrightText: 2026 Jareer and Concat contributors
+// SPDX-FileCopyrightText: 2026 Jareer Abdullah and Concat contributors
 
 //! Selection consolidation: render first, then replace in one undo step.
 
@@ -131,7 +131,9 @@ impl Studio {
                     |progress| {
                         let fraction =
                             (progress.frame as f32 / progress.total.max(1) as f32).clamp(0.0, 1.0);
-                        if fraction - last >= 0.02 {
+                        // Down as well as up: an export whose hardware
+                        // encoder stopped starts again from nothing.
+                        if fraction - last >= 0.02 || fraction < last {
                             last = fraction;
                             on_ui_in_project(epoch, move |studio, _, _| {
                                 if let Some(job) = studio.merge_job.as_mut() {

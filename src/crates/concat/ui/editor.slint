@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// SPDX-FileCopyrightText: 2026 Jareer and Concat contributors
+// SPDX-FileCopyrightText: 2026 Jareer Abdullah and Concat contributors
 
 import { EffectData } from "demo/effects-panel.slint";
 import {
-    AppliedEntryData, AppliedParamData, CatalogueEntryData, ColourKnobData,
+    AppliedEntryData, AppliedParamData, CatalogueEntryData, ColourKnobData, TransitionChoiceData,
 } from "inspector/clip-inspector.slint";
 import {
     CurveData, CurveGroupData, WheelData, WheelGroupData,
@@ -197,6 +197,9 @@ export global Editor {
     in-out property <[AppliedEntryData]> applied-visual;
     in-out property <[AppliedEntryData]> applied-audio;
     in-out property <[AppliedParamData]> visual-params;
+    /// The selected transition's own knobs: the numbers, and the choices.
+    in-out property <[AppliedParamData]> transition-knobs;
+    in-out property <[TransitionChoiceData]> transition-choices;
     in-out property <[AppliedParamData]> audio-params;
     /// The Adjust tab: the colour package's knobs for the selected clip.
     in-out property <[AppliedParamData]> adjust-params;
@@ -325,6 +328,7 @@ export global Editor {
     /// The transition riding into the selected clip; see VideoPanel.
     callback transition-remove();
     callback transition-duration-set(seconds: float);
+    callback transition-param-set(key: string, value: float);
 
     // ── the timeline ──
     in-out property <[TimelineTabData]> timeline-tabs;
@@ -447,6 +451,9 @@ export global Editor {
     callback finger-lifted();
     /// A ruler diamond was dragged: every key at `from` moves to `to`.
     callback key-mark-moved(from: float, to: float);
+    /// A ruler diamond was clicked: the Keyframes pane comes up if it is
+    /// not in the workspace (#490).
+    callback key-mark-opened();
     callback clip-pressed(id: string, additive: bool, edge: int);
     /// Save Video Frame As, from the picture's right-click menu: the
     /// frame at the playhead, at the output's size, as a PNG.

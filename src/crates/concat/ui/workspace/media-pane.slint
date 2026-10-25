@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// SPDX-FileCopyrightText: 2026 Jareer and Concat contributors
+// SPDX-FileCopyrightText: 2026 Jareer Abdullah and Concat contributors
 
 import { I18n } from "../i18n.slint";
 import { Theme, Fmt, Glyph, Icon, Payload, Tip } from "../primitives/primitives.slint";
@@ -960,7 +960,7 @@ component CatalogueCard inherits Rectangle {
 
             tile := Rectangle {
                 y: 0;
-                height: root.compact ? root.height : root.width * 9 / 16;
+                height: root.compact ? root.height : root.width;
                 border-radius: Theme.r;
                 background: root.compact && card.has-hover && root.item.enabled
                     ? Theme.field : Theme.well;
@@ -1296,7 +1296,7 @@ export component ShelfGrid inherits Rectangle {
         Math.floor((root.width + root.gap) / (root.min-card + root.gap)));
     property <length> card-w: (root.width - (root.cols - 1) * root.gap) / root.cols;
     property <length> card-h: root.compact ? root.card-w / 2
-        : root.card-w * 9 / 16 + 4px + 14px;
+        : root.card-w + 4px + 14px;
     property <int> rows: Math.ceil(root.entries.length / root.cols);
 
     height: root.rows > 0 ? root.rows * (root.card-h + root.gap) - root.gap : 0px;
@@ -1345,7 +1345,7 @@ component AdjustmentShelf inherits Rectangle {
         Math.floor((root.width + root.gap) / (root.min-card + root.gap)));
     property <length> card-w: (root.width - (root.cols - 1) * root.gap) / root.cols;
 
-    height: root.card-w * 9 / 16 + 4px + 14px;
+    height: root.card-w + 4px + 14px;
 
     CatalogueCard {
         x: 0;
@@ -1448,6 +1448,11 @@ component CategoryPill inherits Rectangle {
     in property <string> text;
     in property <bool> selected;
     callback clicked();
+    /// A finger went down on the pill, then slid `dx` across the window
+    /// since: the strip's to scroll by. A pill takes the press, so the
+    /// strip under it never hears a drag that starts on one (#415).
+    callback drag-started();
+    callback dragged(dx: length);
 
     height: 24px;
     border-radius: 12px;
@@ -1474,8 +1479,35 @@ component CategoryPill inherits Rectangle {
     }
 
     touch := TouchArea {
+        // Measured across the window, not the pill: the strip moves the
+        // pill along with the finger, and the pill's own coordinates would
+        // read the slide as no slide at all.
+        property <length> start;
+        property <bool> slid;
         mouse-cursor: pointer;
-        clicked => { root.clicked(); }
+        pointer-event(event) => {
+            if (event.kind == PointerEventKind.down) {
+                self.start = root.absolute-position.x + self.mouse-x;
+                self.slid = false;
+                root.drag-started();
+            }
+        }
+        moved => {
+            if (self.pressed) {
+                let dx = root.absolute-position.x + self.mouse-x - self.start;
+                if (Math.abs(dx) > 8px) {
+                    self.slid = true;
+                }
+                if (self.slid) {
+                    root.dragged(dx);
+                }
+            }
+        }
+        clicked => {
+            if (!self.slid) {
+                root.clicked();
+            }
+        }
     }
 }
 
@@ -1525,11 +1557,78 @@ export component CategoryPillBar inherits Rectangle {
             spacing: 6px;
 
             for cat in root.categories: CategoryPill {
+                drag-started => { root.press-offset = root.offset; }
+                dragged(dx) => {
+                    root.offset = Math.max(-root.max-scroll, Math.min(0px, root.press-offset + dx));
+                }
                 text: cat;
                 selected: root.current == cat || (root.current == "" && cat == "All" && Library.view(1).group < 0);
                 clicked => {
                     root.picked(cat);
                 }
+            }
+        }
+    }
+}
+
+// A kind's shelves as a strip of pills, All first: the phone's way to the
+// desktop's shelf strip. Without it a phone showed the first shelf alone,
+// and the first shelf of transitions holds a Dissolve and nothing else
+// (#415).
+export component GroupPillBar inherits Rectangle {
+    /// `Library.view`'s shelf: 0 filters, 1 effects, 2 audio, 3 transitions.
+    in property <int> shelf;
+    in property <[string]> groups;
+
+    height: 30px;
+    clip: true;
+
+    property <int> current: Library.view(root.shelf).group;
+    property <length> offset: 0px;
+    property <length> max-scroll: Math.max(0px, row.preferred-width - root.width);
+    property <length> press-x: 0px;
+    property <length> press-offset: 0px;
+
+    touch := TouchArea {
+        pointer-event(event) => {
+            if (event.kind == PointerEventKind.down) {
+                root.press-x = touch.mouse-x;
+                root.press-offset = root.offset;
+            }
+        }
+        moved => {
+            if (touch.pressed) {
+                root.offset = Math.max(-root.max-scroll, Math.min(0px, root.press-offset + touch.mouse-x - root.press-x));
+            }
+        }
+        scroll-event(event) => {
+            root.offset = Math.max(-root.max-scroll, Math.min(0px, root.offset + event.delta-x + event.delta-y));
+            return EventResult.accept;
+        }
+
+        row := HorizontalLayout {
+            x: Math.max(-root.max-scroll, Math.min(0px, root.offset));
+            y: 3px;
+            height: 24px;
+            spacing: 6px;
+
+            CategoryPill {
+                text: I18n.t("common.all");
+                selected: root.current < 0;
+                clicked => { Library.group-changed(root.shelf, -1); }
+                drag-started => { root.press-offset = root.offset; }
+                dragged(dx) => {
+                    root.offset = Math.max(-root.max-scroll, Math.min(0px, root.press-offset + dx));
+                }
+            }
+            for label[index] in root.groups: CategoryPill {
+                drag-started => { root.press-offset = root.offset; }
+                dragged(dx) => {
+                    root.offset = Math.max(-root.max-scroll, Math.min(0px, root.press-offset + dx));
+                }
+                text: label;
+                selected: root.current == index;
+                clicked => { Library.group-changed(root.shelf, index); }
             }
         }
     }
@@ -1894,12 +1993,11 @@ export component MediaPane inherits Rectangle {
     /// The Audio page is up, or not: a drop of sound files on the window
     /// goes into the library while it is.
     changed tab => { Sounds.shown(root.tab == 8); }
-    /// The Audio page's shelf: 0 = Mine, 1 = Concat, 10 = Voices,
-    /// 11 = Styles.
+    /// The Audio page's shelf: 0 = Mine, 10 = Voices, 11 = Styles. 1 was
+    /// Concat's own sounds, off the page until their list is published (#60).
     property <int> audio-category;
     property <bool> sounds-open: true;
     property <bool> voices-open: true;
-    property <bool> concat-open: true;
     /// How far left the page strip can be pushed: nothing, while its chips
     /// fit. See `strip`.
     property <length> strip-floor: Math.min(0px, strip.width - strip.content-width);
@@ -2261,28 +2359,6 @@ export component MediaPane inherits Rectangle {
                             current: root.audio-category == 0;
                             clicked => { root.audio-category = 0; }
                         }
-                        // Concat's own sounds, by category. The list is
-                        // fetched only when the shelf asks for it.
-                        CategoryHeading {
-                            height: 26px;
-                            title: I18n.t("sounds.concat");
-                            open: root.concat-open;
-                            toggled => { root.concat-open = !root.concat-open; }
-                        }
-                        if root.concat-open: VerticalLayout {
-                            spacing: 1px;
-                            for label[index] in [I18n.t("sounds.all"), I18n.t("sounds.catWhoosh"),
-                                I18n.t("sounds.catImpact"), I18n.t("sounds.catRiser"),
-                                I18n.t("sounds.catAmbience"), I18n.t("sounds.catMusic")]: CategoryRow {
-                                height: 24px;
-                                label: label;
-                                current: root.audio-category == 1 && Sounds.concat-category == index;
-                                clicked => {
-                                    root.audio-category = 1;
-                                    Sounds.concat-category-changed(index);
-                                }
-                            }
-                        }
                         CategoryHeading {
                             height: 26px;
                             title: I18n.t("voices.voices");
@@ -2376,6 +2452,13 @@ export component MediaPane inherits Rectangle {
                         }
                         if root.transitions-open: VerticalLayout {
                             spacing: 1px;
+                            // Every shelf at once, first and the default.
+                            CategoryRow {
+                                height: 24px;
+                                label: I18n.t("common.all");
+                                current: Library.view(3).group == -1;
+                                clicked => { Library.group-changed(3, -1); }
+                            }
                             for label[index] in root.transition-groups: CategoryRow {
                                 height: 24px;
                                 label: label;
@@ -2397,6 +2480,16 @@ export component MediaPane inherits Rectangle {
                         }
                         if root.effects-open: VerticalLayout {
                             spacing: 1px;
+                            // Every shelf at once, first and the default.
+                            CategoryRow {
+                                height: 24px;
+                                label: I18n.t("common.all");
+                                current: !root.audio-shelf && Library.view(1).group == -1;
+                                clicked => { 
+                                    root.audio-shelf = false;
+                                    Library.group-changed(1, -1);
+                                 }
+                            }
                             for label[index] in root.effect-groups: CategoryRow {
                                 height: 24px;
                                 label: label;
@@ -2415,6 +2508,16 @@ export component MediaPane inherits Rectangle {
                         }
                         if root.audio-open: VerticalLayout {
                             spacing: 1px;
+                            // Every shelf at once, first and the default.
+                            CategoryRow {
+                                height: 24px;
+                                label: I18n.t("common.all");
+                                current: root.audio-shelf && Library.view(2).group == -1;
+                                clicked => { 
+                                    root.audio-shelf = true;
+                                    Library.group-changed(2, -1);
+                                 }
+                            }
                             for label[index] in root.audio-groups: CategoryRow {
                                 height: 24px;
                                 label: label;
@@ -2440,6 +2543,13 @@ export component MediaPane inherits Rectangle {
                         }
                         if root.filters-open: VerticalLayout {
                             spacing: 1px;
+                            // Every shelf at once, first and the default.
+                            CategoryRow {
+                                height: 24px;
+                                label: I18n.t("common.all");
+                                current: Library.view(0).group == -1;
+                                clicked => { Library.group-changed(0, -1); }
+                            }
                             for label[index] in root.filter-groups: CategoryRow {
                                 height: 24px;
                                 label: label;
@@ -2594,7 +2704,7 @@ export component MediaPane inherits Rectangle {
                         ? I18n.t("mediaPane.nothingRenderedYetRight")
                         : root.count-all > 0
                         ? I18n.t("mediaPane.nothingKindProject")
-                        : "Drop video and audio files anywhere in the window to import them.";
+                        : I18n.t("mediaPane.dropToImport");
                 }
 
                 if root.tab == 0 && root.items.length > 0: HorizontalLayout {
@@ -2652,64 +2762,6 @@ export component MediaPane inherits Rectangle {
                     SoundList {
                         items: Sounds.mine;
                     }
-                }
-
-                // Concat's own sounds: offered, not fetched, until asked
-                // for - nothing goes online at startup - then listed, each
-                // downloaded the first time it is played or laid down.
-                if root.tab == 8 && root.audio-category == 1: VerticalLayout {
-                    padding: 8px;
-                    spacing: 8px;
-
-                    if Sounds.concat-state == 0 || Sounds.concat-state == 1: Text {
-                        text: I18n.t("sounds.loadConcatHint");
-                        color: Theme.fg-muted;
-                        font-size: Theme.fs-sm;
-                        wrap: word-wrap;
-                    }
-                    if Sounds.concat-state == 0 || Sounds.concat-state == 1: ImportButton {
-                        label: I18n.t("sounds.loadConcat");
-                        busy-label: I18n.t("sounds.loading");
-                        busy: Sounds.concat-state == 1;
-                        glyph: Glyph.music;
-                        clicked => { Sounds.load-concat(); }
-                    }
-                    if Sounds.concat-state == 4: Text {
-                        text: I18n.t("sounds.offline");
-                        color: Theme.fg-muted;
-                        font-size: Theme.fs-sm;
-                        wrap: word-wrap;
-                    }
-                    if Sounds.concat-state == 4: ImportButton {
-                        label: I18n.t("sounds.tryAgain");
-                        glyph: Glyph.reset;
-                        clicked => { Sounds.load-concat(); }
-                    }
-                    if Sounds.concat-state == 2: HorizontalLayout {
-                        spacing: 8px;
-                        Text {
-                            horizontal-stretch: 1;
-                            text: I18n.t("sounds.concatHint");
-                            color: Theme.fg-muted;
-                            font-size: Theme.fs-sm;
-                            wrap: word-wrap;
-                        }
-                        ImportButton {
-                            horizontal-stretch: 0;
-                            height: Theme.h;
-                            label: I18n.t("sounds.refresh");
-                            glyph: Glyph.reset;
-                            clicked => { Sounds.load-concat(); }
-                        }
-                    }
-                    if Sounds.concat-state == 2: SoundList {
-                        items: Sounds.concat;
-                    }
-                }
-
-                if root.tab == 8 && root.audio-category == 1 && Sounds.concat-state == 3: Empty {
-                    glyph: Glyph.music;
-                    text: I18n.t("sounds.comingSoon");
                 }
 
                 // Voices: the user's saved clones and the models' own
@@ -2812,14 +2864,29 @@ export component MediaPane inherits Rectangle {
                         glyph: root.audio-shelf ? Glyph.waveform : Glyph.sparkle;
                         // A sound has no picture: its cards are the compact kind.
                         compact: root.audio-shelf;
-                        // Effects apply directly on single-click to the selected clip —
-                        // auditions:false means click = apply, no monitor overlay confusion.
-                        auditions: false;
+                        // A picture effect is a layer on the timeline, as a
+                        // filter is: dragged onto the lanes, it works on
+                        // everything beneath it for as long as it runs. Short
+                        // of a drag, a click shows it over the monitor and a
+                        // double-click or the plus lays it at the playhead.
+                        // It is no longer put on the selected clip: that was
+                        // a second way to the same picture, found by
+                        // selecting a clip and then hunting for its tab.
+                        // A sound effect still goes on the selected clip - a
+                        // voice changed, not the music under it.
+                        auditions: !root.audio-shelf;
+                        auditioning: root.audio-shelf ? "" : root.audition;
+                        auditioned(id) => { root.audition-filter(id); }
+                        // A sound effect dragged onto the lanes is a sound
+                        // layer: it treats everything heard under it for as
+                        // long as it runs. A click still puts it on the
+                        // selected clip.
+                        payload-kind: root.audio-shelf ? "audio-filter" : "filter";
                         applied(id, label) => {
                             if (root.audio-shelf) {
                                 root.apply-audio(id);
                             } else {
-                                root.apply-effect(id);
+                                root.apply-filter(id, label);
                             }
                         }
                     }

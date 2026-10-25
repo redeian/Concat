@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// SPDX-FileCopyrightText: 2026 Jareer and Concat contributors
+// SPDX-FileCopyrightText: 2026 Jareer Abdullah and Concat contributors
 
 // Hanken Grotesk is bundled rather than assumed: a desktop binary should look
 // the same on a machine that has never installed it. It is published as one
@@ -36,9 +36,10 @@ import { Editor } from "editor.slint";
 import { PaneKind, Panes } from "workspace/pane-switcher.slint";
 import { ChipOption, NewProjectDialog, RecentProjectData, StartData, StartScreen } from "start.slint";
 import { TitleBar } from "title-bar.slint";
-import { PhoneEditor } from "phone/editor.slint";
+import { PhoneEditor, PhoneSheets } from "phone/editor.slint";
 import {
     AppliedEntryData, AppliedParamData, CatalogueEntryData, Library, LibraryViewData,
+    TransitionChoiceData,
 } from "inspector/clip-inspector.slint";
 import { ParamFormat } from "inspector/controls.slint";
 import { ToastData, ToastLayer } from "primitives/toast.slint";
@@ -54,14 +55,16 @@ import {
 
 // Re-exported so main.rs can reach the globals and the struct.
 import { KeyEditor, KeyMarkData, KeyRowData } from "workspace/keyframes-pane.slint";
+import { SpeedRamp } from "inspector/speed-ramp.slint";
 
 export {
     Curves, Fmt, Focus, Payload, Theme, Bezier, Editor, I18n,
     AppliedEntryData, AppliedParamData, CatalogueEntryData, Library, LibraryViewData, ParamFormat,
+    TransitionChoiceData,
     DockDivider, DockSide, PaneKind, SeatBox,
     EffectData, FontSearch, Meters, MediaFilter, MediaItemData, MediaKind, SourcePreview, TextPresetData,
     Backdrop, BackdropData, ClipData, ClipField, ClipKeyData, ClipKind, ClipTextField, DropData, Keyframes,
-    KeyEditor, KeyMarkData, KeyRowData,
+    KeyEditor, KeyMarkData, KeyRowData, SpeedRamp,
     SelectedClipData, SelectedTransitionData, StageGuideData, StageItemData, TextAlignment, TimelineTabData,
     TimelineTool, TrackData, TrackSize, MenuItemData, MenuRow, ExportData, ExportPhase, ModelData, SettingsData,
     ChipOption, RecentProjectData, StartData, SystemFactData, ToastData, ProjectSheetData,
@@ -505,7 +508,10 @@ export component App inherits Window {
             // Escape closes the sheet on top, as its × does. A sheet busy
             // with a job keeps itself - its × is gone then too - and the
             // key is spent on it, not passed to the editor underneath.
-            if (event.text == Key.Escape) {
+            // Android's Back is the same key on a phone: unhandled, Slint
+            // finishes the activity, so Back with Export or a sheet open
+            // quit the app, a running export with it.
+            if (event.text == Key.Escape || event.text == Key.Back) {
                 if (root.confirm.open) { root.confirm-dismissed(); return accept; }
                 if (root.relink.open) { root.relink-dismiss(); return accept; }
                 if (root.project-sheet.open) { root.project-closed(); return accept; }
@@ -530,6 +536,28 @@ export component App inherits Window {
                     if (!root.sheets-fill || !root.captions.running) { root.captions-closed(); }
                     return accept;
                 }
+                // A look being shown over the picture, and nothing above it.
+                if (Editor.library-audition != "") {
+                    Editor.library-audition-filter(Editor.library-audition);
+                    return accept;
+                }
+            }
+            // The phone editor's own sheet - Effects, Text, a clip's tools -
+            // comes down before Back leaves the project.
+            if ((event.text == Key.Back || event.text == Key.Escape) && root.phone && PhoneSheets.open) {
+                PhoneSheets.close-asked += 1;
+                return accept;
+            }
+            // Back with nothing on top: the editor saves and goes back to
+            // the launch screen, as a phone editor's Back returns to its
+            // projects. On the launch screen it goes on up, and Android
+            // leaves the app.
+            if (event.text == Key.Back) {
+                if (!root.on-start) {
+                    root.app-menu-selected("close-project");
+                    return accept;
+                }
+                return reject;
             }
             if (Editor.key-chord(event.text, event.modifiers.shift, event.modifiers.alt,
                     event.modifiers.control, event.modifiers.meta, root.on-start)) {

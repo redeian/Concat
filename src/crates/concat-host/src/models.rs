@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// SPDX-FileCopyrightText: 2026 Jareer and Concat contributors
+// SPDX-FileCopyrightText: 2026 Jareer Abdullah and Concat contributors
 
 //! Where a downloadable model is fetched from, and what proves it arrived
 //! whole.
@@ -239,10 +239,10 @@ pub fn download(
     // A read timeout: a stalled connection blocks in `read` with the
     // cancel flag unreachable, and thirty seconds without a byte means
     // the download is dead.
-    let agent = ureq::AgentBuilder::new()
-        .timeout_connect(std::time::Duration::from_secs(20))
-        .timeout_read(std::time::Duration::from_secs(30))
-        .build();
+    let agent = crate::net::agent(
+        std::time::Duration::from_secs(20),
+        std::time::Duration::from_secs(30),
+    );
     let mut request = agent.get(url);
     if already > 0 {
         request = request.set("Range", &format!("bytes={already}-"));

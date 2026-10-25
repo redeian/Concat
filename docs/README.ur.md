@@ -19,10 +19,11 @@
 
 <p align="center">
   <a href="https://www.star-history.com/jub0t/concat"><img src="https://api.star-history.com/badge?repo=jub0t/concat&type=rank" alt="Star History Rank" height="62" /></a>
+  <a href="https://trendshift.io/repositories/191379?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-191379" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/191379/daily?language=Rust" alt="jub0t%2FConcat | Trendshift" width="250" height="55"/></a>
   <a href="https://concatenate.pages.dev/#download"><img src="../assets/download_button.svg" alt="Download Concat" width="251" /></a>
 </p>
 
-[🇬🇧 English](../README.md) · [🇩🇪 Deutsch](README.de.md) · [🇪🇸 Español](README.es.md) · [🇫🇷 Français](README.fr.md) · [🇮🇹 Italiano](README.it.md) · [🇳🇱 Nederlands](README.nl.md) · [🇵🇱 Polski](README.pl.md) · [🇧🇷 Português (Brasil)](README.pt-BR.md) · [🇷🇺 Русский](README.ru.md) · [🇺🇦 Українська](README.uk.md) · [🇹🇷 Türkçe](README.tr.md) · [🇭🇷 Hrvatski](README.hr.md) · [🇮🇩 Bahasa Indonesia](README.id.md) · [🇻🇳 Tiếng Việt](README.vi.md) · [🇹🇭 ไทย](README.th.md) · [🇯🇵 日本語](README.ja.md) · [🇰🇷 한국어](README.ko.md) · [🇨🇳 简体中文](README.zh-Hans.md) · [🇹🇼 繁體中文](README.zh-TW.md) · [🇸🇦 العربية](README.ar.md) · [🇮🇱 עברית](README.he.md) · [🇮🇷 فارسی](README.fa.md) · [🇮🇳 हिन्दी](README.hi.md) · **🇵🇰 اردو** · [🇧🇩 বাংলা](README.bn.md)
+[🇬🇧 English](../README.md) · [🇩🇪 Deutsch](README.de.md) · [🇪🇸 Español](README.es.md) · [🇫🇷 Français](README.fr.md) · [🇮🇹 Italiano](README.it.md) · [🇳🇱 Nederlands](README.nl.md) · [🇵🇱 Polski](README.pl.md) · [🇧🇷 Português (Brasil)](README.pt-BR.md) · [🇷🇺 Русский](README.ru.md) · [🇺🇦 Українська](README.uk.md) · [🇹🇷 Türkçe](README.tr.md) · [🇦🇿 Azərbaycanca](README.az.md) · [🇭🇷 Hrvatski](README.hr.md) · [🇮🇩 Bahasa Indonesia](README.id.md) · [🇻🇳 Tiếng Việt](README.vi.md) · [🇹🇭 ไทย](README.th.md) · [🇯🇵 日本語](README.ja.md) · [🇰🇷 한국어](README.ko.md) · [🇨🇳 简体中文](README.zh-Hans.md) · [🇹🇼 繁體中文](README.zh-TW.md) · [🇸🇦 العربية](README.ar.md) · [🇮🇱 עברית](README.he.md) · [🇮🇷 فارسی](README.fa.md) · [🇮🇳 हिन्दी](README.hi.md) · **🇵🇰 اردو** · [🇧🇩 বাংলা](README.bn.md)
 
 > 11 اکتوبر 2026 کو انگریزی README سے ترجمہ کیا گیا۔ انگریزی نسخہ ہی تازہ رکھا جاتا ہے۔
 
@@ -67,7 +68,7 @@ Concat ایک مفت، اوپن سورس ویڈیو ایڈیٹر اور macOS، 
 - 📤 **ایکسپورٹ۔** H.264، HEVC، AV1۔ 4K 60 تک، 10 بٹ رنگ۔
 - 🦀 **نیٹو Rust انجن۔** GPU کمپوزیٹر، پراکسیز، ہارڈویئر ڈی کوڈ۔ 4K آسانی سے اسکرب ہوتا ہے۔
 - 🤖 **اسکرپٹ کے قابل۔** ایک JSON-RPC API، جس سے اسکرپٹس اور AI ایجنٹس ویڈیو کاٹ سکتے ہیں۔ سورس سے بلڈ کرنے پر gRPC اور ایک کمانڈ لائن ٹول بھی ملتا ہے۔
-- 🖥️ **macOS، Windows، Linux، Android۔** 25 زبانیں۔ وہی ایپ، وہی پراجیکٹ فائلیں۔
+- 🖥️ **macOS، Windows، Linux، Android۔** 26 زبانیں۔ وہی ایپ، وہی پراجیکٹ فائلیں۔
 
 ## ڈاؤن لوڈ
 

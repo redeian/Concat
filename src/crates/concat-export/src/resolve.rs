@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// SPDX-FileCopyrightText: 2026 Jareer and Concat contributors
+// SPDX-FileCopyrightText: 2026 Jareer Abdullah and Concat contributors
 
 //! The flattened clip list becoming the engine's timeline.
 //!
@@ -358,7 +358,7 @@ pub(crate) fn build_timeline(
         if clip.kind != ClipKind::Image {
             engine_clip.speed =
                 Rational::approximate(audio::clamp_speed(clip.speed)).unwrap_or(Rational::ONE);
-            engine_clip.retime = SpeedCurve::new(&clip.speed_curve);
+            engine_clip.retime = clip.retime();
         }
         engine_clip.animation = animation_of(&clip.animation);
         engine_clip.blend = concat_core::timeline::Blend::parse(&clip.blend);

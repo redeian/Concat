@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// SPDX-FileCopyrightText: 2026 Jareer and Concat contributors
+// SPDX-FileCopyrightText: 2026 Jareer Abdullah and Concat contributors
 
 //! Every edit operation, as data.
 //!
@@ -401,7 +401,8 @@ pub enum Command {
     /// Places a layer: a look or an effect over a span of the timeline that
     /// treats everything beneath it. No media; the chain starts as the one
     /// package named, at its defaults, and the clip's opacity is how hard it
-    /// is applied.
+    /// is applied. With `sound`, a sound layer: an audio package, run over
+    /// the mix of everything audible for its span.
     AddLayerClip {
         /// The lane to place it on. None picks the first free lane *above*
         /// the highest one occupied over its span, minting one at the top
@@ -413,10 +414,17 @@ pub enum Command {
         /// Seconds on the timeline; the editorial default when absent.
         #[serde(default)]
         duration: Option<f64>,
-        /// The package the layer applies, e.g. "concat.warm".
+        /// The package the layer applies, e.g. "concat.warm", or an audio
+        /// one, e.g. "concat.telephone", with `sound`.
         effect_id: String,
         /// What the lane calls it.
         name: String,
+        /// True lays a sound layer ([`crate::model::ClipKind::SoundLayer`]):
+        /// the package goes on the clip's `filters`, and the layer treats
+        /// the soundtrack rather than the picture. Absent is a picture
+        /// layer.
+        #[serde(default)]
+        sound: bool,
     },
     /// Gives a clip a speed curve, or takes it away. The source covered is
     /// held constant, as a speed change does, so the clip's timeline length
@@ -426,6 +434,31 @@ pub enum Command {
         clip_id: String,
         /// The curve, or None for a constant rate at the current mean.
         curve: Option<Vec<SpeedPoint>>,
+        /// When true - the magnetic timeline - the clips after it on its
+        /// lane move by however far its end moved, either way, so a clip
+        /// sped up closes up behind it as a magnetic trim does. False
+        /// leaves the gap; later clips then only move out of the way of a
+        /// clip that grew over them.
+        #[serde(default)]
+        ripple: bool,
+    },
+    /// Gives a clip everything another has but its place: its look and
+    /// sound, keys, effects, crop, mask, cutout, stabilizing, background
+    /// and enhancement - the whole clip, so a field added to [`Clip`] is
+    /// carried without a list here to remember it in. The clip keeps its
+    /// own id, lane, start, length, media, kind, in-point and speed, which
+    /// say where it is and what it plays, and its own transition in and
+    /// link to the picture its sound came off, which belong to its
+    /// neighbours. What a copy, a paste and a duplicate end with.
+    ///
+    /// The window's alone: a whole clip from outside would be a way round
+    /// every check the other commands make, so it never crosses the API.
+    #[serde(skip)]
+    MatchClip {
+        /// The clip that takes everything on.
+        clip_id: String,
+        /// The clip it is made like.
+        like: Box<Clip>,
     },
     /// Puts a key on one property at one point of a clip, replacing
     /// whichever key on that property was already within a hair of it.
@@ -706,6 +739,13 @@ pub enum Command {
         clip_id: String,
         /// The new rate, clamped into 0.0625..=16 (the engine's range).
         speed: f64,
+        /// When true - the magnetic timeline - the clips after it on its
+        /// lane move by however far its end moved, either way, so a clip
+        /// sped up closes up behind it as a magnetic trim does. False
+        /// leaves the gap; later clips then only move out of the way of a
+        /// clip that grew over them.
+        #[serde(default)]
+        ripple: bool,
     },
     /// Adjusts the picture's placement. Each field is optional so a drag
     /// can send just the axis it moved; absent fields stay put.
@@ -1136,7 +1176,7 @@ impl Command {
                         .transition_in
                         .iter()
                         .flatten()
-                        .any(|tr| bad([tr.duration]))
+                        .any(|tr| bad([tr.duration]) || tr.params.values().any(|v| !v.is_finite()))
                     || matches!(
                         patch.background,
                         Some(Some(Background::Blur { amount })) if !amount.is_finite()
@@ -1252,6 +1292,7 @@ pub fn apply(
         // CapyCut: the inspector's colour swatches for a shape.
         command @ Command::SetShapeStyle { .. } => shape::apply(project, mint, command),
         command @ (Command::UpdateClip { .. }
+        | Command::MatchClip { .. }
         | Command::SetClipSpeed { .. }
         | Command::SetClipCutout { .. }
         | Command::AddCutoutStroke { .. }

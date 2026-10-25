@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// SPDX-FileCopyrightText: 2026 Jareer and Concat contributors
+// SPDX-FileCopyrightText: 2026 Jareer Abdullah and Concat contributors
 
 import { Theme } from "../theme/theme.slint";
 import { Pane } from "pane.slint";
@@ -106,6 +106,7 @@ export component TimelinePane inherits Rectangle {
 
     callback scrubbed(seconds: float);
     callback key-mark-moved(from: float, to: float);
+    callback key-mark-opened();
     /// A press on an empty stretch of lane; see Editor.blur.
     callback floor-pressed();
     callback clip-pressed(id: string, additive: bool, edge: int);
@@ -440,6 +441,7 @@ export component TimelinePane inherits Rectangle {
 
                 scrubbed(seconds) => { root.scrubbed(seconds); }
                 key-mark-moved(from, to) => { root.key-mark-moved(from, to); }
+                key-mark-opened => { root.key-mark-opened(); }
                 hovered(seconds) => { root.hovered(seconds); }
                 hover-ended => { root.hover-ended(); }
                 floor-pressed => { root.floor-pressed(); }

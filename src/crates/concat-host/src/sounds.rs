@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// SPDX-FileCopyrightText: 2026 Jareer and Concat contributors
+// SPDX-FileCopyrightText: 2026 Jareer Abdullah and Concat contributors
 
 //! The user's own sound library: the Audio page's Mine shelf.
 //!
@@ -382,10 +382,10 @@ pub fn cached_catalogue(dirs: &AppDirs) -> Option<Catalogue> {
 /// error.
 pub fn fetch_catalogue(dirs: &AppDirs) -> Result<Option<Catalogue>, String> {
     use std::io::Read;
-    let agent = ureq::AgentBuilder::new()
-        .timeout_connect(std::time::Duration::from_secs(15))
-        .timeout_read(std::time::Duration::from_secs(30))
-        .build();
+    let agent = crate::net::strict_agent(
+        std::time::Duration::from_secs(15),
+        std::time::Duration::from_secs(30),
+    );
     let response = match agent.get(crate::models::SOUNDS_MANIFEST).call() {
         Ok(response) => response,
         Err(ureq::Error::Status(404, _)) => return Ok(None),

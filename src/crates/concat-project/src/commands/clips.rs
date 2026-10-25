@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// SPDX-FileCopyrightText: 2026 Jareer and Concat contributors
+// SPDX-FileCopyrightText: 2026 Jareer Abdullah and Concat contributors
 
 //! Placing, moving and cutting clips: the edits that change what is on the timeline and when.
 //!
@@ -205,6 +205,7 @@ pub(super) fn apply(
             duration,
             effect_id,
             name,
+            sound,
         } => {
             let duration = duration
                 .unwrap_or(DEFAULT_LAYER_DURATION)
@@ -216,7 +217,9 @@ pub(super) fn apply(
                 // Over the picture, as a title is: a layer treats what is
                 // beneath it, and the bottom-first walk put one under the
                 // footage whenever a lower lane was free, where it treated
-                // nothing.
+                // nothing. A sound layer treats every lane alike, and goes
+                // over the picture too, where it reads as a treatment and
+                // not as one more sound.
                 None => first_free_track_above(timeline, start, duration)
                     .unwrap_or_else(|| fresh_track(timeline, mint)),
             };
@@ -227,9 +230,17 @@ pub(super) fn apply(
             } else {
                 name
             };
-            let mut clip =
-                Clip::blank(id.clone(), track_id, ClipKind::Layer, name, start, duration);
-            clip.video_effects = vec![AppliedFilter::new(effect_id)];
+            let kind = if sound {
+                ClipKind::SoundLayer
+            } else {
+                ClipKind::Layer
+            };
+            let mut clip = Clip::blank(id.clone(), track_id, kind, name, start, duration);
+            if sound {
+                clip.filters = vec![AppliedFilter::new(effect_id)];
+            } else {
+                clip.video_effects = vec![AppliedFilter::new(effect_id)];
+            }
             timeline.clips.push(Arc::new(clip));
             Ok(Outcome {
                 created_id: Some(id),
@@ -296,6 +307,7 @@ pub(super) fn apply(
                     let applied = assign(&mut clip.duration, duration);
                     if applied {
                         clip.rewindow_keys(old, 0.0, duration);
+                        crate::speed::rewindow_clip(clip, old, 0.0, duration);
                     }
                     (applied, duration - old, old_end - JOIN_EPSILON)
                 }
@@ -303,9 +315,15 @@ pub(super) fn apply(
                     // Dragging the head moves the in-point too, so the pixels
                     // under the remaining part of the clip do not slide. The
                     // head cannot reach before the source begins.
+                    // Under a curve the head extends at the speed it starts at.
+                    let lead = clip
+                        .speed_curve
+                        .as_deref()
+                        .and_then(crate::speed::curve_of)
+                        .map_or(clip.speed, |curve| curve.speed_at(0.0));
                     let shift = delta
                         .min(clip.duration - MIN_CLIP_DURATION)
-                        .max(-clip.source_start / clip.speed);
+                        .max(-clip.source_start / lead);
                     // A magnetic head trim never moves the clip, so the
                     // timeline's own start is no limit to it; a plain one
                     // stops at zero.
@@ -316,14 +334,22 @@ pub(super) fn apply(
                     };
                     let moved = start - clip.start;
                     let duration = clip.duration - moved;
-                    let source_start = (clip.source_start + moved * clip.speed).max(0.0);
                     let old = clip.duration;
+                    // The source the head took with it: a constant rate's
+                    // share, or under a curve the curve's own. Worked on a
+                    // copy, so a trim that changes nothing changes nothing.
+                    let mut retimed = Clip::clone(clip);
+                    let consumed = crate::speed::rewindow_clip(&mut retimed, old, moved, old)
+                        .unwrap_or(moved * clip.speed);
+                    let source_start = (clip.source_start + consumed).max(0.0);
                     // Bitwise so no assignment is short-circuited away.
                     let applied = assign(&mut clip.start, start)
                         | assign(&mut clip.duration, duration)
                         | assign(&mut clip.source_start, source_start);
                     if applied {
                         clip.rewindow_keys(old, moved, old);
+                        clip.speed = retimed.speed;
+                        clip.speed_curve = retimed.speed_curve;
                     }
                     if ripple {
                         // The in-point moved; the clip stays put, and the
@@ -353,28 +379,21 @@ pub(super) fn apply(
                 let Some(index) = timeline.clips.iter().position(|clip| clip.id == clip_id) else {
                     continue;
                 };
-                {
-                    // A curve does not survive a cut in halves: the map from
-                    // here to the source is not affine, so both halves go to
-                    // the constant mean, which is what they averaged.
-                    let clip = timeline.clip_at_mut(index);
-                    let offset = time - clip.start;
-                    if offset > MIN_CLIP_DURATION
-                        && offset < clip.duration - MIN_CLIP_DURATION
-                        && clip.speed_curve.is_some()
-                    {
-                        clip.speed_curve = None;
-                    }
-                }
                 let clip: &Clip = &timeline.clips[index];
                 let offset = time - clip.start;
                 if offset <= MIN_CLIP_DURATION || offset >= clip.duration - MIN_CLIP_DURATION {
                     continue;
                 }
-                let (head_source, tail_source) =
+                let (head_source, mut tail_source) =
                     split_source(clip.source_start, clip.speed, offset);
                 let whole = clip.duration;
                 let mut tail = clip.clone();
+                // Under a curve each half keeps its share of it, and the
+                // tail starts where the curve had got to in the source.
+                if let Some(consumed) = crate::speed::rewindow_clip(&mut tail, whole, offset, whole)
+                {
+                    tail_source = clip.source_start + consumed;
+                }
                 tail.id = mint.next("c");
                 tail.start = clip.start + offset;
                 tail.duration = clip.duration - offset;
@@ -388,6 +407,7 @@ pub(super) fn apply(
                 tail.rewindow_keys(whole, offset, whole);
                 created = Some(tail.id.clone());
                 let head = timeline.clip_at_mut(index);
+                crate::speed::rewindow_clip(head, whole, 0.0, offset);
                 head.duration = offset;
                 head.source_start = head_source;
                 head.fade_out = 0.0;
@@ -571,13 +591,15 @@ pub(super) fn apply(
                 return Ok(Outcome::default());
             };
             // The cut is a split's, so it leaves the pieces as a split does:
-            // under a curve the map is not affine, and the in-point below
-            // assumes it is, so both pieces go to the constant mean they
-            // averaged.
-            timeline.clip_at_mut(index).speed_curve = None;
+            // under a curve each keeps its share of it.
             let offset = time - start;
-            let (head_source, tail_source) = split_source(source_start, speed, offset);
+            let (head_source, mut tail_source) = split_source(source_start, speed, offset);
             let mut tail = Clip::clone(&timeline.clips[index]);
+            if let Some(consumed) =
+                crate::speed::rewindow_clip(&mut tail, clip_duration, offset, clip_duration)
+            {
+                tail_source = source_start + consumed;
+            }
             tail.id = mint.next("c");
             tail.start = time;
             tail.duration = clip_duration - offset;
@@ -586,6 +608,7 @@ pub(super) fn apply(
             tail.fade_in = 0.0;
             tail.rewindow_keys(clip_duration, offset, clip_duration);
             let head = timeline.clip_at_mut(index);
+            crate::speed::rewindow_clip(head, clip_duration, 0.0, offset);
             head.duration = offset;
             head.source_start = head_source;
             head.fade_out = 0.0;
@@ -688,7 +711,7 @@ pub(super) fn apply(
             let media = project
                 .media
                 .iter()
-                .find(|media| media.path == path)
+                .find(|media| super::media::same_path(&media.path, &path))
                 .expect("imported above");
             let mut merged =
                 default_clip(first.id.clone(), first.track_id.clone(), media, first.start);

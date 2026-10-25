@@ -1,14 +1,17 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// SPDX-FileCopyrightText: 2026 Jareer and Concat contributors
+// SPDX-FileCopyrightText: 2026 Jareer Abdullah and Concat contributors
 
 import { I18n } from "../i18n.slint";
 import { Theme, SegmentedControl } from "../primitives/primitives.slint";
+import { SectionTabs } from "../primitives/section-tabs.slint";
+import { Glyph } from "../icons.slint";
 import { Select } from "../primitives/select.slint";
 import { Pane, PaneBody, PaneScroll } from "pane.slint";
 import { PaneKind, PaneSwitcher } from "pane-switcher.slint";
 import { EffectData } from "../demo/effects-panel.slint";
 import {
     AdjustPanel, AppliedEntryData, AppliedParamData, AudioPanel, BackgroundRows, ProcessorRows,
+    TransitionChoiceData,
     CatalogueEntryData, ColourKnobData, EnhancePanel, FilterPanel, PresetStack, SpeedPanel,
     TransitionPanel, VideoPanel,
 } from "../inspector/clip-inspector.slint";
@@ -115,6 +118,8 @@ export component ConfigPane inherits Rectangle {
     property <bool> has-selection: root.selected.present;
     /// The transition selected on its own on the lanes, when no clip is.
     in property <SelectedTransitionData> transition;
+    in property <[AppliedParamData]> transition-knobs;
+    in property <[TransitionChoiceData]> transition-choices;
     property <bool> on-transition: root.transition.present && !root.has-selection;
     in property <string> project-name: I18n.t("common.untitledProject");
     in property <string> project-folder: "—";
@@ -228,6 +233,7 @@ export component ConfigPane inherits Rectangle {
     callback clip-enhance-run();
     callback transition-remove();
     callback transition-duration-set(seconds: float);
+    callback transition-param-set(key: string, value: float);
 
 
     // The tab strip follows the selection, and stays short: three tabs at
@@ -236,9 +242,12 @@ export component ConfigPane inherits Rectangle {
     // picture - its placement, its speed, its colour; Audio
     // the level, the fades and the voice and room chain; Effects the two
     // shelves and the picture's chain. A still loses Audio, a sound clip
-    // keeps Audio alone, and a title gets Text alone: its look is its
+    // keeps Audio alone, and a title gets Text and Effects: its look is its
     // typography, stroke and box, all on the Text tab, and Video or Audio
-    // on a title would be panels that can only say "nothing here".
+    // on a title would be panels that can only say "nothing here". Its
+    // picture chain is real, though - a title draws its effects like any
+    // clip - so the chain has its tab, or one dropped on it could be
+    // neither seen nor taken off (#484).
     property <bool> is-text: root.selected.kind == ClipKind.text;
     property <bool> is-image: root.selected.kind == ClipKind.image;
     /// A shape gets one tab, Vector Image, with the placement panel
@@ -252,20 +261,46 @@ export component ConfigPane inherits Rectangle {
     /// panel it grades everything beneath it with, and its chain - are the
     /// tab's sections, so an adjustment layer is graded the way a clip is.
     property <bool> is-layer: root.selected.kind == ClipKind.filter;
-    property <[string]> tabs: root.selected.batch-volume ? ["Audio"] : root.is-text ? ["Text", "Effects", "Animation"]
+    /// A sound layer gets one tab, Audio, for the filter layer's reason:
+    /// its strength and ramps, then its chain and the sound library -
+    /// the Audio effects page a sound clip has, over everything heard.
+    property <bool> is-sound-layer: root.selected.kind == ClipKind.sound-layer;
+    /// Effects are laid on the timeline as layers now, so a clip's own
+    /// chain is not something to go looking for: its tab shows only on a
+    /// clip that already carries one - from an older project, a template,
+    /// the API - so that chain can still be seen, tuned and taken off.
+    /// The colour panel's own package and the chroma key have homes of
+    /// their own (Adjust, the cutout), so they do not count as a chain: a
+    /// clip only graded or keyed has no Effects tab to go looking in.
+    pure function own-link(id: string) -> bool {
+        return id == "concat.adjust" || id == "concat.chroma-key";
+    }
+    property <bool> has-chain: root.applied-visual.length > 2
+        || (root.applied-visual.length > 0 && !root.own-link(root.applied-visual[0].id))
+        || (root.applied-visual.length > 1 && !root.own-link(root.applied-visual[1].id));
+    // CapyCut: every kind that can be moved carries the Animation tab.
+    property <[string]> tabs: root.selected.batch-volume ? ["Audio"]
+        : root.is-text ? (root.has-chain ? ["Text", "Effects", "Animation"] : ["Text", "Animation"])
         : root.is-layer ? ["Filter", "Animation"]
-        : root.is-shape ? ["Video", "Effects", "Animation"]
-        : root.is-image ? ["Video", "Effects", "Animation"]
+        : root.is-sound-layer ? ["Audio"]
+        : root.is-shape ? ["Video", "Animation"]
+        : root.is-image ? (root.has-chain ? ["Video", "Effects", "Animation"] : ["Video", "Animation"])
         : root.is-audio ? ["Audio"]
-        : ["Video", "Audio", "Effects", "Animation"];
+        : root.has-chain ? ["Video", "Audio", "Effects", "Animation"]
+            : ["Video", "Audio", "Animation"];
     /// The same tabs in the interface's language. `tabs` stays English,
     /// because the panels are picked by comparing against it.
-    property <[string]> tabs-shown: root.selected.batch-volume ? [I18n.t("common.audio")] : root.is-text ? [I18n.t("common.text"), I18n.t("common.effects"), I18n.t("configPane.animation")]
+    property <[string]> tabs-shown: root.selected.batch-volume ? [I18n.t("common.audio")]
+        : root.is-text ? (root.has-chain ? [I18n.t("common.text"), I18n.t("common.effects"), I18n.t("configPane.animation")]
+            : [I18n.t("common.text"), I18n.t("configPane.animation")])
         : root.is-layer ? [I18n.t("configPane.filter"), I18n.t("configPane.animation")]
-        : root.is-shape ? [I18n.t("configPane.vectorImage"), I18n.t("common.effects"), I18n.t("configPane.animation")]
-        : root.is-image ? [I18n.t("common.video"), I18n.t("common.effects"), I18n.t("configPane.animation")]
+        : root.is-sound-layer ? [I18n.t("common.audio")]
+        : root.is-shape ? [I18n.t("configPane.vectorImage"), I18n.t("configPane.animation")]
+        : root.is-image ? (root.has-chain ? [I18n.t("common.video"), I18n.t("common.effects"), I18n.t("configPane.animation")]
+            : [I18n.t("common.video"), I18n.t("configPane.animation")])
         : root.is-audio ? [I18n.t("common.audio")]
-        : [I18n.t("common.video"), I18n.t("common.audio"), I18n.t("common.effects"), I18n.t("configPane.animation")];
+        : root.has-chain ? [I18n.t("common.video"), I18n.t("common.audio"), I18n.t("common.effects"), I18n.t("configPane.animation")]
+            : [I18n.t("common.video"), I18n.t("common.audio"), I18n.t("configPane.animation")];
     /// A one-segment segmented control is a label wearing a costume, so a lone
     /// tab renders as the panel's plain heading instead.
     property <bool> single: root.tabs.length < 2;
@@ -275,9 +310,11 @@ export component ConfigPane inherits Rectangle {
     property <int> tab;
     /// The kind the strip was last built for. A selection change can leave the
     /// strip pointing past the end of a shorter list — Audio on a still,
-    /// anything at all on a title — so the index is pulled back in when the
+    /// a video's third tab on a title — so the index is pulled back in when the
     /// shape of the strip changes, and left alone when it has not.
     property <ClipKind> strip-kind;
+    // Taking a clip's last effect off takes its tab away under you.
+    changed has-chain => { root.tab = Math.min(root.tab, root.tabs.length - 1); }
     changed selected => {
         if (root.selected.kind != root.strip-kind) {
             root.strip-kind = root.selected.kind;
@@ -300,19 +337,34 @@ export component ConfigPane inherits Rectangle {
         // and the Effects tab's "Effects", since `showing` picks the panel
         // by this name alone.
         : root.heading == "Audio"
-            ? (root.selected.batch-volume ? ["Sound"] : ["Sound", "AudioEffects"])
+            ? (root.selected.batch-volume ? ["Sound"]
+                : root.is-sound-layer ? ["Layer", "AudioEffects"]
+                : ["Sound", "AudioEffects"])
         : root.heading == "Effects" ? ["Effects"]
         : root.heading == "Text" ? ["Text"]
         // CapyCut: a page of its own, so animations can keep being added
         // without crowding the panels a clip is trimmed and graded in.
         : root.heading == "Animation" ? ["Animation"]
         : ["Layer", "Adjust", "Effects"];
+    /// A mark for each section, in the same order: where the clip sits,
+    /// what makes it better, its colour's knobs; its level and its sound's
+    /// chain; a layer's own strength, then its colour and its chain.
+    property <[Glyph]> section-icons: root.heading == "Video"
+            ? (root.is-shape ? [Glyph.move] : [Glyph.move, Glyph.wand, Glyph.sliders])
+        : root.heading == "Audio"
+            ? (root.selected.batch-volume ? [Glyph.volume]
+                : root.is-sound-layer ? [Glyph.filter, Glyph.waveform]
+                : [Glyph.volume, Glyph.waveform])
+        : root.heading == "Effects" ? [Glyph.sparkle]
+        : root.heading == "Text" ? [Glyph.text-mark]
+        : [Glyph.filter, Glyph.sliders, Glyph.sparkle];
     /// The sections as the dropdown shows them; see `tabs-shown`.
     property <[string]> sections-shown: root.heading == "Video"
             ? (root.is-shape ? [I18n.t("configPane.basic")]
                 : [I18n.t("configPane.basic"), I18n.t("common.enhance"), I18n.t("common.adjust")])
         : root.heading == "Audio"
             ? (root.selected.batch-volume ? [I18n.t("configPane.basic")]
+                : root.is-sound-layer ? [I18n.t("common.layer"), I18n.t("configPane.audioEffects")]
                 : [I18n.t("configPane.basic"), I18n.t("configPane.audioEffects")])
         : root.heading == "Effects" ? [I18n.t("common.effects")]
         : root.heading == "Text" ? [I18n.t("common.text")]
@@ -360,7 +412,7 @@ export component ConfigPane inherits Rectangle {
             return;
         }
         if (root.jump-tab == "Video") { root.tab = 0; }
-        else if (root.jump-tab == "Audio") { root.tab = root.is-audio ? 0 : 1; }
+        else if (root.jump-tab == "Audio") { root.tab = root.is-audio || root.is-sound-layer ? 0 : 1; }
         else if (root.jump-tab == "Effects") { root.tab = root.tabs.length - 1; }
         // Enhance sits second in the Video tab for a video and a still
         // alike, and Audio effects second in the Audio tab.
@@ -542,6 +594,9 @@ export component ConfigPane inherits Rectangle {
             PaneScroll {
                 TransitionPanel {
                     transition: root.transition;
+                    knobs: root.transition-knobs;
+                    choices: root.transition-choices;
+                    param-set(key, value) => { root.transition-param-set(key, value); }
                     remove => { root.transition-remove(); }
                     duration-set(seconds) => { root.transition-duration-set(seconds); }
                 }
@@ -610,9 +665,10 @@ export component ConfigPane inherits Rectangle {
             }
         }
 
-        // The tab's sections, as a second strip under the first, in the
-        // same segmented style. One section needs no strip: the tab already
-        // says where you are.
+        // The tab's sections, as a strip of marks and words under the
+        // tabs: on the panel itself, so it reads as a place inside the tab
+        // and not a second row of tabs. One section needs no strip: the tab
+        // already says where you are.
         if root.has-selection && root.sections.length > 1: Rectangle {
             height: 40px;
             background: Theme.panel;
@@ -626,12 +682,12 @@ export component ConfigPane inherits Rectangle {
             }
 
             HorizontalLayout {
-                padding-left: 8px;
-                padding-right: 8px;
+                padding-left: 4px;
+                padding-right: 4px;
                 VerticalLayout {
-                    alignment: center;
-                    SegmentedControl {
+                    SectionTabs {
                         options: root.sections-shown;
+                        icons: root.section-icons;
                         // A press on a segment assigns `current` inside the
                         // control, which ends a plain binding here: the
                         // highlight then stayed where it was pressed while
@@ -715,6 +771,8 @@ export component ConfigPane inherits Rectangle {
 
                 if root.showing == "Layer": FilterPanel {
                     selected: root.selected;
+                    help: root.is-sound-layer ? I18n.t("clipInspector.soundLayerTreatsTheMix")
+                        : I18n.t("clipInspector.layerTreatsEverythingUnder");
                     set(field, value) => { root.clip-set(field, value); }
                     commit => { root.clip-commit(); }
                 }
@@ -794,7 +852,10 @@ export component ConfigPane inherits Rectangle {
                         noun: I18n.t("common.audioEffect");
                         library-title: I18n.t("configPane.audioEffects");
                         shelf: 2;
-                        hidden: ["concat.loudness", "concat.denoise", "concat.enhance-voice"];
+                        // A sound layer has no Sound page with their switches,
+                        // so its treatments are cards like any other link.
+                        hidden: root.selected.kind == ClipKind.sound-layer ? []
+                            : ["concat.loudness", "concat.denoise", "concat.enhance-voice"];
                         group-labels: root.audio-groups;
                         catalogue: root.catalogue-audio;
                         applied: root.applied-audio;

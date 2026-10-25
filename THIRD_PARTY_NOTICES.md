@@ -26,6 +26,12 @@ originate at https://huggingface.co/ggerganov/whisper.cpp (MIT); Concat
 mirrors them and downloads them on demand from that mirror, and never
 bundles them. See "The model mirror" below.
 
+The one model Concat does bundle is Silero VAD v6.2.0 in whisper.cpp's
+format (`ggml-silero-v6.2.0.bin`, from https://huggingface.co/ggml-org/whisper-vad,
+MIT; Silero VAD itself is MIT, https://github.com/snakers4/silero-vad,
+Copyright (c) 2020-present Silero Team). It finds where the speech is, so
+captions are timed from it.
+
 ## Slint (used under GPL-3.0-only)
 
 The `concat` crate (`src/crates/concat`) builds against
@@ -267,9 +273,9 @@ of it.
 
 ## Effect preview photograph
 
-The effect catalogue cards are drawn from a photograph by Vitaly Gariev on
-Unsplash (https://unsplash.com/@silverkblack), used under the Unsplash
-License. The still lives at `src/crates/concat-host/assets/card-still.jpg`
+The effect catalogue cards are drawn from a photograph by Sou Jest on
+Unsplash (https://unsplash.com/@soujest,
+https://unsplash.com/photos/2v921tlqdXE), used under the Unsplash License. The still lives at `src/crates/concat-host/assets/card-still.jpg`
 and is embedded in the app; each card is the effect's own shader run over
 it on the GPU when the app first needs the card (`concat-host`'s
 `cards.rs`).

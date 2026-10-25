@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// SPDX-FileCopyrightText: 2026 Jareer and Concat contributors
+// SPDX-FileCopyrightText: 2026 Jareer Abdullah and Concat contributors
 
 //! Text-to-speech: text in, a narration WAV in the project folder out.
 //!
@@ -1068,6 +1068,7 @@ fn recordings_dir(dirs: &AppDirs) -> Result<PathBuf, String> {
 
 /// How far ahead of Chatterbox's last report its next is taken to be: it
 /// reports every few tokens, so a short way.
+#[cfg(feature = "chatterbox")]
 const CHATTERBOX_STEP: f32 = 0.02;
 
 /// How many sentences `text` appears to have, at least one: the stretches

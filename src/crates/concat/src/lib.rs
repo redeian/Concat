@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// SPDX-FileCopyrightText: 2026 Jareer and Concat contributors
+// SPDX-FileCopyrightText: 2026 Jareer Abdullah and Concat contributors
 
 //! Concat's editor window, in Slint.
 //!
@@ -70,6 +70,7 @@ mod presets;
 // CapyCut: *Remove silence*'s joining piece, in a file of its own.
 mod silence_cut;
 mod source;
+mod speed_ramp;
 mod studio;
 mod sysinfo;
 /// Native Wayland file drops, which winit does not report; see the module.
@@ -218,7 +219,9 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
         platform::set_ui_scale(percent);
     }
 
-    let (startup_mark, safe) = safe_start();
+    // Not for a smoke run: it exits through `leave`, past the mark's drop,
+    // and the mark it left put the next real launch in software for nothing.
+    let (startup_mark, safe) = if smoke { (None, false) } else { safe_start() };
 
     // The shell doesn't exist yet - it needs the window the backend is about
     // to help create - but `Shell::with` is a no-op until `Shell::install`
@@ -258,6 +261,42 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
         // See the handler in platform.rs for why this is a raw event and
         // not a TouchArea.
         || Shell::with(|_, app| app.invoke_blur()),
+        // Back at the front, after Explorer or Finder: a file moved out
+        // from under an open project is noticed here, and the relink
+        // dialog opens on it. See `Studio::check_missing_media`.
+        || {
+            Shell::with(|shell, app| {
+                let changed = shell.studio.borrow_mut().check_missing_media();
+                if changed {
+                    shell.studio.borrow().publish(&app, &shell.models);
+                }
+            });
+        },
+        // The loop ending. On a Mac, ⌘Q and the Dock's Quit end it inside
+        // the system's terminate, past every close road, and `run` never
+        // returns: the project is saved here or not at all. Every other way
+        // out has released the session by now, so this does nothing there.
+        // https://github.com/jub0t/Concat/issues/437
+        || {
+            let terminating = std::cell::Cell::new(false);
+            Shell::with(|shell, _| {
+                let Ok(mut studio) = shell.studio.try_borrow_mut() else {
+                    log::warn!("close: app terminating mid-edit; project not saved");
+                    return;
+                };
+                if studio.session.is_some() {
+                    log::info!("close: app terminating");
+                    terminating.set(true);
+                    if let Err(error) = studio.close_project() {
+                        log::warn!("close: project could not be saved: {error}");
+                    }
+                }
+            });
+            // What `run` returning would have done next, had it returned.
+            if terminating.get() {
+                stop_exports();
+            }
+        },
     )?;
 
     let host = match Host::start(gpu) {
@@ -288,7 +327,14 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
     let mut studio = Studio::new(host);
     studio.set_phone(phone);
     if safe {
-        studio.notify(&i18n::t("start.safeMode"), false);
+        // Each key in a call of its own: scripts/locales.py finds a key by
+        // the literal inside `t(...)`, and one held in a variable is lost.
+        let notice = if cfg!(target_os = "android") {
+            i18n::t("start.safeModePhone")
+        } else {
+            i18n::t("start.safeMode")
+        };
+        studio.notify(&notice, false);
     }
     studio.reload_packages(false);
     studio.watch_packages();
@@ -389,6 +435,8 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
         editor.set_applied_visual(ModelRc::from(models.applied_visual.clone()));
         editor.set_applied_audio(ModelRc::from(models.applied_audio.clone()));
         editor.set_visual_params(ModelRc::from(models.visual_params.clone()));
+        editor.set_transition_knobs(ModelRc::from(models.transition_knobs.clone()));
+        editor.set_transition_choices(ModelRc::from(models.transition_choices.clone()));
         editor.set_audio_params(ModelRc::from(models.audio_params.clone()));
         editor.set_adjust_params(ModelRc::from(models.adjust_params.clone()));
         editor.set_adjust_wheels(ModelRc::from(models.adjust_wheels.clone()));
@@ -400,6 +448,9 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
             .set_rows(ModelRc::from(models.key_rows.clone()));
         app.global::<KeyEditor>()
             .set_rows(ModelRc::from(models.key_editor_rows.clone()));
+        let ramp = app.global::<SpeedRamp>();
+        ramp.set_points(ModelRc::from(models.speed_points.clone()));
+        ramp.set_presets(ModelRc::from(models.speed_presets.clone()));
         editor.set_key_marks(ModelRc::from(models.key_marks.clone()));
         app.global::<Library>()
             .set_views(ModelRc::from(models.library_views.clone()));
@@ -618,13 +669,20 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
     // Mutate, then republish. Every handler is one of these three: the whole
     // window, the lanes alone (for the handlers a pointer drives directly,
     // which arrive as a stream), or the dock alone (a gutter drag).
+    //
+    // The body runs in a closure of its own, so a `return` in it ends the
+    // handler and not the republish after it. Pasted in bare, an early
+    // return skipped the publish and left the window showing the state from
+    // before until the next event republished it: Generate captions from a
+    // clip's menu opened the sheet only at the next click (#433).
     macro_rules! handler {
         ($publish:ident, |$state:ident $(, $arg:ident : $ty:ty)*| $body:block) => {{
             move |$($arg : $ty),*| {
                 Shell::with(|shell, app| {
                     {
                         let mut $state = shell.studio.borrow_mut();
-                        $body
+                        #[allow(clippy::redundant_closure_call)]
+                        (|| $body)();
                     }
                     shell.studio.borrow_mut().refresh_art();
                     shell.studio.borrow().$publish(&app, &shell.models);
@@ -754,24 +812,14 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
         state.dock.remove_leaf(&from_path);
     }));
     editor.on_dock_add(on_dock!(|state, kind: PaneKind| {
-        let seats = state.dock_layout().seats;
-        let Some(biggest) = seats
-            .iter()
-            .max_by(|a, b| (a.width * a.height).total_cmp(&(b.width * b.height)))
-        else {
-            return;
-        };
-        let across = biggest.width >= SEAT_MIN_W * 2.0;
-        let down = biggest.height >= SEAT_MIN_H * 2.0;
-        let side = if biggest.width >= biggest.height && (across || !down) {
-            DockSide::Right
-        } else {
-            DockSide::Bottom
-        };
-        let Some(path) = state.dock.leaf_path(biggest.index.max(0) as usize) else {
-            return;
-        };
-        state.dock.split_leaf(&path, kind, side);
+        add_pane(&mut state, kind);
+    }));
+    // Not on a phone or in the compact dock: there the two seats are the
+    // monitor and the timeline, and a third would squeeze both.
+    editor.on_key_mark_opened(on_dock!(|state| {
+        if !state.compact && !state.meters.phone && !state.dock.contains(PaneKind::Keyframes) {
+            add_pane(&mut state, PaneKind::Keyframes);
+        }
     }));
     editor.on_dock_remove(on_dock!(|state, seat: i32| {
         let Some(path) = state.dock.leaf_path(seat.max(0) as usize) else {
@@ -858,6 +906,7 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
                     &[
                         "mp4", "mov", "mkv", "webm", "avi", "m4v", "mp3", "wav", "aac", "m4a",
                         "flac", "ogg", "png", "jpg", "jpeg", "webp", "gif", "bmp", "tif", "tiff",
+                        "svg",
                     ],
                 )),
                 |studio, _, _, paths| studio.handle(Msg::Media(MediaMsg::Import(paths))),
@@ -1234,6 +1283,30 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
             state.frame_selected(fill);
         }));
     }
+    // The Speed tab's curve. Its own global, like the keyframe cluster's,
+    // since the Speed panel sits in three places; each verb edits the echo
+    // and the panel commits.
+    {
+        let ramp = app.global::<SpeedRamp>();
+        ramp.on_curve(on_lanes!(|state, on: bool| {
+            state.speed_curve_set(on);
+        }));
+        ramp.on_point(on_lanes!(|state, index: i32, x: f32, y: f32| {
+            state.speed_curve_point(index, x, y);
+        }));
+        ramp.on_remove(on_lanes!(|state, index: i32| {
+            state.speed_curve_remove(index);
+        }));
+        ramp.on_preset_chosen(on_lanes!(|state, index: i32| {
+            state.speed_curve_preset(index);
+        }));
+        ramp.on_smoothness(on_lanes!(|state, smooth: bool| {
+            state.speed_curve_smooth(smooth);
+        }));
+        ramp.on_extreme(on_lanes!(|state, faster: bool, speed: f32| {
+            state.speed_curve_extreme(faster, speed);
+        }));
+    }
     // The Keyframes panel's verbs; its rows go out with every publish.
     {
         let editor = app.global::<KeyEditor>();
@@ -1562,6 +1635,9 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
     editor.on_transition_duration_set(on_window!(|state, seconds: f32| {
         state.set_transition_duration(seconds as f64);
     }));
+    editor.on_transition_param_set(on_window!(|state, key: SharedString, value: f32| {
+        state.set_transition_param(key.as_str(), f64::from(value));
+    }));
 
     // ── the context menu ──
     editor.on_clip_context(on_window!(|state, id: SharedString| {
@@ -1704,6 +1780,17 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
             let Some(action) = action else {
                 return;
             };
+            // Save is the one chord that means the same in a field, under a
+            // sheet and on the timeline. Every other chord is the editor's,
+            // and a key that came out of a text field or past a sheet was
+            // never meant for it: Slint's TextInput turns away the Ctrl
+            // chords it has no use for, and a read-only one every key, so
+            // Ctrl+B in a title split the clip and Backspace in a path field
+            // deleted it; and Delete or Q with Export or Settings open cut
+            // the timeline nobody could see.
+            if action != "save" && (typing(&app) || shell.studio.borrow().sheet_open()) {
+                return;
+            }
             handled = true;
             match action {
                 // The playhead, straight: these were never menu rows and
@@ -2376,6 +2463,10 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
                     ClipKind::Text => (theme.get_kind_text(), theme.get_kind_text_well()),
                     ClipKind::Filter => (theme.get_kind_filter(), theme.get_kind_filter_well()),
                     ClipKind::Shape => (theme.get_kind_shape(), theme.get_kind_shape_well()),
+                    ClipKind::SoundLayer => (
+                        theme.get_kind_sound_layer(),
+                        theme.get_kind_sound_layer_well(),
+                    ),
                 };
                 let wave = studio
                     .peaks
@@ -2509,8 +2600,104 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
         std::mem::forget(startup_mark);
         leave(1);
     }
+    // Android ends the loop when it destroys the activity - Back on the
+    // launch screen, or the system taking it back - with no close request
+    // first, and the process then left without a save: the edits since the
+    // last autosave were lost and the project's lock was left behind. A
+    // desktop's every way out closes the project before the loop ends.
+    #[cfg(target_os = "android")]
+    Shell::with(|shell, _| {
+        let mut studio = shell.studio.borrow_mut();
+        if studio.session.is_some()
+            && let Err(error) = studio.close_project()
+        {
+            log::warn!("close: the activity ended and the project could not be saved: {error}");
+        }
+    });
+    stop_exports();
     drop(startup_mark);
     leave(0);
+}
+
+/// Whether a text field has the focus, read or write. Slint says it only
+/// through its own window internals: the keystroke that reaches the keymap
+/// carries no target, and a flag each field kept would stay set when a
+/// sheet closed with its field still focused.
+fn typing(app: &App) -> bool {
+    use slint::private_unstable_api::re_exports::{TextInput, WindowInner};
+    WindowInner::from_pub(app.window())
+        .focus_item
+        .borrow()
+        .upgrade()
+        .is_some_and(|item| item.downcast::<TextInput>().is_some())
+}
+
+/// Adds a pane of `kind` beside the largest seat: to its right when that
+/// seat is wide enough to halve across, else below it.
+fn add_pane(state: &mut Studio, kind: PaneKind) {
+    let seats = state.dock_layout().seats;
+    let Some(biggest) = seats
+        .iter()
+        .max_by(|a, b| (a.width * a.height).total_cmp(&(b.width * b.height)))
+    else {
+        return;
+    };
+    let across = biggest.width >= SEAT_MIN_W * 2.0;
+    let down = biggest.height >= SEAT_MIN_H * 2.0;
+    let side = if biggest.width >= biggest.height && (across || !down) {
+        DockSide::Right
+    } else {
+        DockSide::Bottom
+    };
+    let Some(path) = state.dock.leaf_path(biggest.index.max(0) as usize) else {
+        return;
+    };
+    state.dock.split_leaf(&path, kind, side);
+}
+
+/// How long a quit waits for an export it cancelled to stop.
+const EXPORT_PATIENCE: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// Ends what is still rendering before the process goes, so a quit in the
+/// middle of an export leaves no half-written `.{name}.concat-*` file
+/// beside the output: the window's export is cancelled, and the API's
+/// server is stopped - its jobs cancelled, the caller of each told
+/// `export.failed`, the callers hung up (#431). A render stops at its next
+/// frame and removes its files on the way out; one that does not stop
+/// within [`EXPORT_PATIENCE`] does not keep the quit from quitting.
+fn stop_exports() {
+    let mut held = None;
+    Shell::with(|shell, _| {
+        let mut studio = shell.studio.borrow_mut();
+        held = Some((studio.host.exporter.clone(), studio.host.server.take()));
+    });
+    let Some((exporter, server)) = held else {
+        return;
+    };
+    if !exporter.is_busy() && server.is_none() {
+        return;
+    }
+    let until = std::time::Instant::now() + EXPORT_PATIENCE;
+    // The server first: it cancels its own jobs, so each ends as a cancel
+    // its caller can tell apart from a failure.
+    if let Some(server) = server {
+        log::info!("close: stopping the API's server");
+        let (stopped, wait) = std::sync::mpsc::channel();
+        let _ = std::thread::Builder::new()
+            .name("concat server stop".to_owned())
+            .spawn(move || {
+                server.stop();
+                let _ = stopped.send(());
+            });
+        let _ = wait.recv_timeout(EXPORT_PATIENCE);
+    }
+    exporter.cancel();
+    while exporter.is_busy() && std::time::Instant::now() < until {
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    if exporter.is_busy() {
+        log::warn!("close: the export did not stop in time; leaving anyway");
+    }
 }
 
 /// How long a launch runs before it counts as having started.
@@ -2524,14 +2711,19 @@ const SAFE_AFTER: std::time::Duration = std::time::Duration::from_secs(15);
 /// first seconds - a new one each time (#339, #378, #389, #242) - and a
 /// launch check on a CI machine meets none of them. A launch that dies
 /// before [`SAFE_AFTER`] leaves its mark; the next one finds it, draws on
-/// WARP or lavapipe instead of the GPU, and keeps doing so - a driver that
-/// killed one launch kills the next, and starting on the GPU every other
-/// time would crash every other time. Slower, and it opens. Settings >
-/// General's GPU switch goes back. Only on Windows and Linux, which have a
-/// software rasteriser to draw on; a Mac has none, and a phone's backend
-/// picks its own way to draw.
+/// WARP or lavapipe instead of the GPU, and keeps doing so for that build -
+/// a driver that killed one launch kills the next, and starting on the GPU
+/// every other time would crash every other time. Slower, and it opens.
+/// The next build tries the GPU again: 0.2.8 kept the CPU for good, and a
+/// Task Manager kill or a crash an update fixed left fast machines drawing
+/// every hover on it (#476). Settings > General's GPU switch goes back
+/// sooner. On Windows and Linux, which have a software rasteriser to draw
+/// on, and on Android, where the safe way is OpenGL ES in place of Vulkan:
+/// a phone whose Vulkan driver dies on the first frame closed on every
+/// launch, and the backend's fall back to OpenGL ES only catches a surface
+/// that fails to open (#507). A Mac has neither.
 fn safe_start() -> (Option<concat_host::jobs::Tripwire>, bool) {
-    if !cfg!(any(windows, target_os = "linux")) {
+    if !cfg!(any(windows, target_os = "linux", target_os = "android")) {
         return (None, false);
     }
     let Ok(dirs) = concat_host::AppDirs::locate() else {
@@ -2539,18 +2731,43 @@ fn safe_start() -> (Option<concat_host::jobs::Tripwire>, bool) {
     };
     let mark = dirs.data.join("startup");
     let mut preferences = prefs::Preferences::load(&dirs);
-    let safe = concat_host::jobs::Tripwire::tripped(&mark) && !preferences.software_gpu;
-    if safe {
-        log::warn!("start: the last launch closed while starting; drawing in software from now on");
+    let died = concat_host::jobs::Tripwire::tripped(&mark);
+    if preferences.settle_start(died, &concat_host::machine::build()) {
+        preferences.save(&dirs);
+    }
+    if preferences.draws_in_software() && std::env::var_os("CONCAT_GPU").is_none() {
+        // SAFETY: on a desk the process is single-threaded here, as for the
+        // scale above. On Android the activity's glue thread is running, but
+        // it is Java's and reads no environment; Rust's own readers take
+        // the same lock this does. On Android the variable means OpenGL ES
+        // in place of Vulkan (the Skia patch reads it), not the CPU.
+        unsafe { std::env::set_var("CONCAT_GPU", "software") };
+    }
+    // Said on every launch it holds, not only the first: the person on
+    // the CPU is the one who wants to know why the window is slow.
+    let safe = preferences.software_after_crash.is_some() && !preferences.software_gpu;
+    (Some(concat_host::jobs::Tripwire::arm(&mark)), safe)
+}
+
+/// `concat --software`: Settings > General's GPU switch turned off before
+/// the window opens, so this launch and every one after it draws in
+/// software - the way into a window that a driver draws as coloured
+/// squares, where the switch itself cannot be seen. The switch turns it
+/// back on. Nothing where [`safe_start`] has no software rasteriser.
+pub fn draw_in_software() {
+    if !cfg!(any(windows, target_os = "linux")) {
+        log::warn!("start: --software has no software rasteriser to draw on here");
+        return;
+    }
+    let Ok(dirs) = concat_host::AppDirs::locate() else {
+        return;
+    };
+    let mut preferences = prefs::Preferences::load(&dirs);
+    if !preferences.software_gpu {
+        log::warn!("start: --software; drawing in software from now on");
         preferences.software_gpu = true;
         preferences.save(&dirs);
     }
-    if preferences.software_gpu && std::env::var_os("CONCAT_GPU").is_none() {
-        // SAFETY: the process is single-threaded here, as for the scale
-        // above: nothing reads the environment concurrently.
-        unsafe { std::env::set_var("CONCAT_GPU", "software") };
-    }
-    (Some(concat_host::jobs::Tripwire::arm(&mark)), safe)
 }
 
 /// Ends the process with `code`, the log flushed first, and the threads

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// SPDX-FileCopyrightText: 2026 Jareer and Concat contributors
+// SPDX-FileCopyrightText: 2026 Jareer Abdullah and Concat contributors
 
 //! What the window remembers between runs, as one small JSON file in the
 //! app's config directory. None of it is project state: the theme, which
@@ -156,15 +156,33 @@ pub struct Preferences {
     /// wants one for smoother playback turns it on in Settings.
     pub proxies: bool,
     /// Drawing in software: the window and the compositor on the
-    /// platform's software rasteriser (WARP, lavapipe) instead of the GPU.
-    /// Set by itself when a launch died while starting (see `safe_start`),
-    /// and turned off again in Settings > General. Read at launch.
+    /// platform's software rasteriser (WARP, lavapipe) instead of the GPU,
+    /// as the person chose in Settings > General or with `concat
+    /// --software`. Kept until they turn it back. Read at launch.
+    ///
+    /// Not the `softwareGpu` key 0.2.8 wrote: that one a safe start also
+    /// set, for good, and nothing can tell the two apart. Left behind, it
+    /// gives every machine a safe start trapped on the CPU one more go on
+    /// its GPU - a hover drew a 14700K at "Very High" power (#476) - and
+    /// a GPU that still dies starting puts it back in software by itself.
+    #[serde(rename = "drawInSoftware")]
     pub software_gpu: bool,
+    /// The build whose launch died while starting, which put the window in
+    /// software by itself (see `safe_start`): until another build starts,
+    /// or the person turns the GPU back on. A crash that an update fixed -
+    /// the stray dxcompiler.dll of #418 - or a driver that a later one did
+    /// would otherwise leave Concat on the CPU for good.
+    pub software_after_crash: Option<String>,
     /// The magnetic timeline: a delete and a trim close the gap they would
-    /// leave, on the lane they happen on. Off by default, because a gap is
-    /// sometimes the point; ⇧⌫ ripples either way.
+    /// leave, on the lane they happen on. Off by default on a desk, because
+    /// a gap is sometimes the point; ⇧⌫ ripples either way. Read it through
+    /// [`Preferences::magnetic`], which knows the phone's default.
     /// https://github.com/jub0t/Concat/issues/106
     pub magnetic: bool,
+    /// Whether the person has set the magnetic timeline, either way. Every
+    /// phone has saved `magnetic: false` without anyone choosing it, so
+    /// this is what tells a phone's chosen Off from the default it got.
+    pub magnetic_chosen: bool,
     /// Trim follow: while a clip's edge is dragged, the playhead rides the
     /// edge, so the monitor shows the exact frame the cut lands on. Off by
     /// default; the tray's button beside the hand turns it on.
@@ -344,27 +362,198 @@ impl Preferences {
             .filter(|location| std::path::Path::new(location).is_dir())
     }
 
+    /// Whether the magnet shows as on. On a phone, until the person says
+    /// otherwise: the phone editors close the gap a delete leaves on the
+    /// main picture's lane, a Split and Delete there left a black hole in
+    /// the picture and the export (#497), and the phone shell has no magnet
+    /// in sight to turn on. What that default closes is
+    /// `Studio::closes_gap`'s to say; the field alone is the desk's magnet,
+    /// which closes every lane.
+    pub fn magnetic(&self) -> bool {
+        self.magnetic || (crate::platform::phone() && !self.magnetic_chosen)
+    }
+
+    /// Sets the magnetic timeline by the person's choice.
+    pub fn set_magnetic(&mut self, on: bool) {
+        self.magnetic = on;
+        self.magnetic_chosen = true;
+    }
+
+    /// Whether this launch draws in software, by choice or after a crash.
+    pub fn draws_in_software(&self) -> bool {
+        self.software_gpu || self.software_after_crash.is_some()
+    }
+
+    /// Settles how this launch draws, from whether the last one died while
+    /// starting and which build this is; whether anything changed and
+    /// wants saving. A death puts the window in software for this build. A
+    /// different build tries the GPU again, and a death on it puts the
+    /// window back.
+    pub fn settle_start(&mut self, died_starting: bool, build: &str) -> bool {
+        if self.software_gpu {
+            return false;
+        }
+        match &self.software_after_crash {
+            Some(crashed) if crashed != build => {
+                log::info!("start: {crashed} closed while starting; {build} tries the GPU again");
+                self.software_after_crash = None;
+                true
+            }
+            None if died_starting => {
+                log::warn!(
+                    "start: the last launch closed while starting; drawing in software until another build"
+                );
+                self.software_after_crash = Some(build.to_owned());
+                true
+            }
+            _ => false,
+        }
+    }
+
     /// Reads the file, or the defaults when there is none.
     pub fn load(dirs: &AppDirs) -> Self {
-        std::fs::read(dirs.config.join(FILE))
-            .ok()
-            .and_then(|bytes| serde_json::from_slice(&bytes).ok())
-            .unwrap_or_default()
+        let path = dirs.config.join(FILE);
+        let Ok(bytes) = std::fs::read(&path) else {
+            return Self::default();
+        };
+        if let Ok(preferences) = serde_json::from_slice(&bytes) {
+            return preferences;
+        }
+        // One value of the wrong shape - a field an older or newer build
+        // wrote differently, a hand edit - failed the whole file, and every
+        // setting went back to its default at once. The ones that still
+        // read are kept, and the file as it was is set aside rather than
+        // overwritten by the next save.
+        let _ = std::fs::copy(&path, path.with_extension("json.unreadable"));
+        let preferences = salvage(&bytes);
+        log::warn!(
+            "settings: {} did not read whole; kept what did",
+            path.display()
+        );
+        preferences
     }
 
     /// Writes the file. Best effort: a preference that did not stick is
-    /// not worth interrupting anyone over.
+    /// not worth interrupting anyone over. Written beside the file and
+    /// moved over it, so a crash or a second window saving at the same
+    /// moment leaves one whole file, never half of one; and readable by
+    /// this account alone where the platform has the notion, since it
+    /// holds the remote API's token.
     pub fn save(&self, dirs: &AppDirs) {
         let _ = std::fs::create_dir_all(&dirs.config);
-        if let Ok(encoded) = serde_json::to_vec_pretty(self) {
-            let _ = std::fs::write(dirs.config.join(FILE), encoded);
+        let Ok(encoded) = serde_json::to_vec_pretty(self) else {
+            return;
+        };
+        let path = dirs.config.join(FILE);
+        let staging = dirs
+            .config
+            .join(format!("{FILE}.{}.part", std::process::id()));
+        if write_private(&staging, &encoded).is_err() || std::fs::rename(&staging, &path).is_err() {
+            let _ = std::fs::remove_file(&staging);
         }
     }
+}
+
+/// The fields of a settings file that read, on the defaults: each top-level
+/// value is laid over them in turn and kept only if the whole still reads.
+fn salvage(bytes: &[u8]) -> Preferences {
+    let Ok(serde_json::Value::Object(found)) = serde_json::from_slice(bytes) else {
+        return Preferences::default();
+    };
+    let Ok(serde_json::Value::Object(mut kept)) = serde_json::to_value(Preferences::default())
+    else {
+        return Preferences::default();
+    };
+    for (key, value) in found {
+        let before = kept.insert(key.clone(), value);
+        if serde_json::from_value::<Preferences>(serde_json::Value::Object(kept.clone())).is_err() {
+            match before {
+                Some(before) => kept.insert(key, before),
+                None => kept.remove(&key),
+            };
+        }
+    }
+    serde_json::from_value(serde_json::Value::Object(kept)).unwrap_or_default()
+}
+
+/// Writes a new file only this account can read, on Unix; elsewhere as
+/// the platform makes files, which on Windows is the profile's own folder.
+fn write_private(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
+    use std::io::Write;
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+    let mut file = options.open(path)?;
+    file.write_all(bytes)?;
+    file.sync_all()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A choice made is kept, whatever the platform's default: a phone
+    /// that turned the magnet off stays off, and a desk that turned it on
+    /// stays on.
+    #[test]
+    fn a_chosen_magnetic_timeline_outranks_the_default() {
+        let mut prefs = Preferences::default();
+        assert!(!prefs.magnetic_chosen);
+        prefs.set_magnetic(false);
+        assert!(!prefs.magnetic());
+        prefs.set_magnetic(true);
+        assert!(prefs.magnetic());
+        // A file saved before the choice was recorded reads as unchosen.
+        let old: Preferences = serde_json::from_str(r#"{"magnetic":false}"#).expect("old prefs");
+        assert!(!old.magnetic_chosen);
+        assert_eq!(old.magnetic(), crate::platform::phone());
+    }
+
+    /// One value of the wrong shape costs that value, not every setting,
+    /// and the file is set aside before anything writes over it.
+    #[test]
+    fn a_settings_file_that_does_not_read_whole_keeps_what_does() {
+        let root =
+            std::env::temp_dir().join(format!("concat-settings-salvage-{}", std::process::id()));
+        let dirs = AppDirs {
+            config: root.join("config"),
+            data: root.join("data"),
+        };
+        std::fs::create_dir_all(&dirs.config).expect("a config folder");
+        std::fs::write(
+            dirs.config.join(FILE),
+            r#"{"magnetic": true, "dark": "very", "lastProjectLocation": "/films"}"#,
+        )
+        .expect("a settings file");
+        let prefs = Preferences::load(&dirs);
+        assert!(prefs.magnetic);
+        assert_eq!(prefs.last_project_location.as_deref(), Some("/films"));
+        assert_eq!(
+            prefs.dark, None,
+            "the value that did not read is the default"
+        );
+        assert!(dirs.config.join("settings.json.unreadable").is_file());
+
+        prefs.save(&dirs);
+        assert!(Preferences::load(&dirs).magnetic);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(dirs.config.join(FILE))
+                .expect("saved")
+                .permissions()
+                .mode();
+            assert_eq!(mode & 0o077, 0, "nobody else reads it");
+        }
+        let leftovers = std::fs::read_dir(&dirs.config)
+            .expect("listed")
+            .filter_map(Result::ok)
+            .filter(|entry| entry.file_name().to_string_lossy().ends_with(".part"))
+            .count();
+        assert_eq!(leftovers, 0);
+        let _ = std::fs::remove_dir_all(root);
+    }
 
     #[test]
     fn the_last_project_location_survives_loading_and_saving() {
@@ -605,5 +794,57 @@ mod tests {
         assert_eq!(back.keybinds.get("mute").map(String::as_str), Some(""));
         let older: Preferences = serde_json::from_str(r#"{"dark": false}"#).unwrap();
         assert!(older.keybinds.is_empty());
+    }
+
+    /// A launch that died while starting puts the window in software for
+    /// its build only: the next build tries the GPU again, and a death on
+    /// that one puts it back. The person's own choice is never touched.
+    #[test]
+    fn a_crash_draws_in_software_until_another_build() {
+        let mut prefs = Preferences::default();
+        assert!(!prefs.settle_start(false, "a"));
+        assert!(!prefs.draws_in_software());
+
+        assert!(prefs.settle_start(true, "a"));
+        assert!(prefs.draws_in_software());
+        assert!(
+            !prefs.settle_start(false, "a"),
+            "same build stays in software"
+        );
+        assert!(
+            !prefs.settle_start(true, "a"),
+            "a death in software changes nothing"
+        );
+        assert!(prefs.draws_in_software());
+
+        assert!(prefs.settle_start(false, "b"));
+        assert!(!prefs.draws_in_software(), "a new build tries the GPU");
+        assert!(prefs.settle_start(true, "b"));
+        assert_eq!(prefs.software_after_crash.as_deref(), Some("b"));
+
+        let mut chosen = Preferences {
+            software_gpu: true,
+            ..Preferences::default()
+        };
+        assert!(!chosen.settle_start(true, "a"));
+        assert!(!chosen.settle_start(false, "b"));
+        assert!(chosen.draws_in_software());
+        assert_eq!(chosen.software_after_crash, None);
+    }
+
+    /// The `softwareGpu` key 0.2.8 wrote is let go, safe start's and the
+    /// person's alike, so the GPU gets one more go; the new key round-trips.
+    #[test]
+    fn the_old_software_key_is_let_go() {
+        let older: Preferences = serde_json::from_str(r#"{"softwareGpu": true}"#).unwrap();
+        assert!(!older.draws_in_software());
+        let prefs = Preferences {
+            software_gpu: true,
+            ..Preferences::default()
+        };
+        let text = serde_json::to_string(&prefs).unwrap();
+        assert!(text.contains("\"drawInSoftware\":true"), "{text}");
+        let back: Preferences = serde_json::from_str(&text).unwrap();
+        assert!(back.software_gpu);
     }
 }

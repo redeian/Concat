@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// SPDX-FileCopyrightText: 2026 Jareer and Concat contributors
+// SPDX-FileCopyrightText: 2026 Jareer Abdullah and Concat contributors
 
 //! Enhance: an enhanced copy of a media file, written once.
 //!
@@ -398,6 +398,7 @@ fn footage(
             color_range: concat_media::ColorRange::Limited,
             hardware: false,
             threads: 2,
+            software_only: false,
         },
     )
     .map_err(|error| error.to_string())?;

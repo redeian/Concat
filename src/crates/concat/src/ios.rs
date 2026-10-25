@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// SPDX-FileCopyrightText: 2026 Jareer and Concat contributors
+// SPDX-FileCopyrightText: 2026 Jareer Abdullah and Concat contributors
 
 //! The iPhone's ways in and out: the system's pickers for Import, and
 //! Photos for a finished export.
@@ -609,7 +609,7 @@ fn save_to_photos(path: &Path) -> Result<String, String> {
         status = rx.recv().unwrap_or(0);
     }
     if status != 3 && status != 4 {
-        return Err("Concat may not add to Photos; allow it under Settings, Concat, Photos".into());
+        return Err(t("export.photosNotAllowed"));
     }
     let url = NSURL::from_file_path(path).ok_or("the export's path is not a file URL")?;
     let change = RcBlock::new(move || {

@@ -55,6 +55,16 @@
                 Target="[INSTALLFOLDER]concat.exe"
                 WorkingDirectory="INSTALLFOLDER"
                 Icon="capycut.ico" />
+      <!-- The way in when a graphics driver draws the window as coloured
+           squares: it turns off Settings > General > Draw on the GPU,
+           which that window hides. -->
+      <Shortcut Id="SafeGraphicsShortcut"
+                Name="CapyCut (safe graphics)"
+                Description="CapyCut, drawn in software"
+                Target="[INSTALLFOLDER]concat.exe"
+                Arguments="--software"
+                WorkingDirectory="INSTALLFOLDER"
+                Icon="capycut.ico" />
       <RemoveFolder Id="RemoveShortcutFolder" On="uninstall" />
       <RegistryValue Root="HKCU" Key="Software\Concat" Name="StartMenu" Type="integer" Value="1" KeyPath="yes" />
     </Component>

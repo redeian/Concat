@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// SPDX-FileCopyrightText: 2026 Jareer and Concat contributors
+// SPDX-FileCopyrightText: 2026 Jareer Abdullah and Concat contributors
 
 //! The tools: which API method or edit command each one is, and what an
 //! agent is told about it.
@@ -32,8 +32,24 @@ const POLL: Duration = Duration::from_millis(250);
 /// How long `export_wait` waits when told nothing, and at most.
 const WAIT_DEFAULT: f64 = 60.0;
 const WAIT_LONGEST: f64 = 600.0;
-/// The stages of an export in order, for one progress figure across them.
-const STAGES: [&str; 5] = ["cutout", "stabilize", "video", "audio", "mux"];
+/// How many stages an export has, for one progress figure across them.
+const STAGES: usize = 5;
+
+/// Where a stage comes in an export, from 0. A job's status names the
+/// stage the exporter reports - "rendering" (or "rendering in software",
+/// going again after the hardware encoder stopped), "mixing audio",
+/// "muxing" - and the API's documentation names them "video", "audio" and "mux"; both
+/// are known here, and one this does not know counts as the first.
+fn stage_place(stage: &str) -> usize {
+    match stage {
+        "cutout" => 0,
+        "stabilize" => 1,
+        "video" | "rendering" | "rendering in software" => 2,
+        "audio" | "mixing audio" => 3,
+        "mux" | "muxing" => 4,
+        _ => 0,
+    }
+}
 
 /// What a tool does with its arguments.
 #[derive(Clone, Copy, Debug)]
@@ -372,7 +388,7 @@ pub fn catalogue() -> Vec<Tool> {
         command(
             "effect_layer_add",
             "Add an effect layer",
-            "Places an effect or look as a layer over the timeline: from `start` for `duration` seconds (5 s when absent), it treats everything beneath it. `effectId` is a package id from `effects_list`; the layer's opacity (via `clip_update`) is how strongly it applies. To put an effect on one clip instead, set that clip's `videoEffects` with `clip_update`.",
+            "Places an effect or look as a layer over the timeline: from `start` for `duration` seconds (5 s when absent), it treats everything beneath it. `effectId` is a package id from `effects_list`; the layer's opacity (via `clip_update`) is how strongly it applies. To put an effect on one clip instead, set that clip's `videoEffects` with `clip_update`. With `sound: true` and an \"audio\" package it is a sound layer (kind \"soundLayer\"): its chain, in the clip's `filters`, treats the mix of everything audible for its span, its opacity the wet/dry and its fades the ramps.",
             "addLayerClip",
         ),
         command(
@@ -420,7 +436,7 @@ pub fn catalogue() -> Vec<Tool> {
         method(
             "export_status",
             "Export status",
-            "How an export job stands, at once: `state` (\"running\", \"done\", \"cancelled\" or \"failed\"), `stage` (\"cutout\", \"stabilize\", \"video\", \"audio\", \"mux\"), frames done of total, `fraction` of the stage (0-1), and once done the file and its size, or the error.",
+            "How an export job stands, at once: `state` (\"running\", \"done\", \"cancelled\" or \"failed\"), `stage` (\"cutout\", \"stabilize\", \"rendering\", \"mixing audio\" or \"muxing\"), frames done of total, `fraction` of the stage (0-1), and once done the file and its size, or the error.",
             "export.status",
             Raw,
         )
@@ -445,9 +461,12 @@ pub fn catalogue() -> Vec<Tool> {
         Tool {
             name: "preview_frame",
             title: "Preview a frame",
-            description: "Renders the true composited frame at `time` seconds on an open project's timeline and returns it as an image to look at - titles, effects and transforms included. Without `width` and `height` it fits within 1280 pixels; give both for another size (8192 at most). With `output` (a .png path) it is written there instead.",
-            read_only: true,
-            destructive: false,
+            description: "Renders the true composited frame at `time` seconds on an open project's timeline and returns it as an image to look at - titles, effects and transforms included. Without `width` and `height` it fits within 1280 pixels; give both for another size (8192 at most). With `output` (a .png path) it is written there instead, replacing any file already at that path.",
+            // Not read-only: with `output` it writes a file, over one that
+            // is there. A client that trusts the hint to skip asking would
+            // let an agent overwrite anything under home.
+            read_only: false,
+            destructive: true,
             idempotent: true,
             action: Action::PreviewFrame,
         },
@@ -830,10 +849,10 @@ fn export_wait(
         let running = current["state"] == "running";
         if let Some(progress) = progress {
             let stage = current["stage"].as_str().unwrap_or_default();
-            let place = STAGES.iter().position(|known| *known == stage).unwrap_or(0) as f64;
+            let place = stage_place(stage) as f64;
             let fraction = current["fraction"].as_f64().unwrap_or(0.0).clamp(0.0, 1.0);
             let overall = if running {
-                ((place + fraction) / STAGES.len() as f64 * 100.0).min(99.9)
+                ((place + fraction) / STAGES as f64 * 100.0).min(99.9)
             } else {
                 100.0
             };
@@ -1113,6 +1132,61 @@ mod tests {
             let root = concat_api::request_schema();
             check(&root, &written, &root, name).unwrap_or_else(|why| panic!("{why}"));
         }
+    }
+
+    /// A backend whose export reports the statuses it is given, in order,
+    /// the last for ever.
+    struct Statuses(std::collections::VecDeque<Value>);
+
+    impl Backend for Statuses {
+        fn call(&mut self, _request: Request) -> Result<Value, ApiError> {
+            let status = if self.0.len() > 1 {
+                self.0.pop_front()
+            } else {
+                self.0.front().cloned()
+            };
+            Ok(status.expect("a status"))
+        }
+
+        fn describe(&self) -> Value {
+            json!({ "mode": "test" })
+        }
+    }
+
+    /// An export that mixes sound and muxes it reports the stages the
+    /// exporter names - "rendering", "mixing audio", "muxing" - and the
+    /// wait's progress climbs through them to the end.
+    #[test]
+    fn export_wait_progress_follows_the_stages_the_exporter_reports() {
+        let running = |stage: &str, frame: i64, total: i64| {
+            json!({ "state": "running", "stage": stage, "frame": frame, "total": total,
+                    "fraction": if total > 0 { frame as f64 / total as f64 } else { 0.0 } })
+        };
+        let mut backend = Statuses(
+            [
+                running("rendering", 50, 100),
+                running("mixing audio", 0, 100),
+                running("muxing", 100, 100),
+                json!({ "state": "done", "stage": "muxing", "frame": 100, "total": 100, "fraction": 1.0 }),
+            ]
+            .into(),
+        );
+        let seen = std::cell::RefCell::new(Vec::new());
+        let report =
+            |progress: f64, total: f64, _: String| seen.borrow_mut().push((progress, total));
+        let cancelled = AtomicBool::new(false);
+        let outcome = export_wait(
+            json!({ "job": "j1" }),
+            &mut backend,
+            &cancelled,
+            Some(&report),
+        )
+        .expect("waits");
+        assert!(!outcome.is_error);
+        assert_eq!(
+            *seen.borrow(),
+            vec![(50.0, 100.0), (60.0, 100.0), (99.9, 100.0), (100.0, 100.0)]
+        );
     }
 
     #[test]
