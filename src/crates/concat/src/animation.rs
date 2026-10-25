@@ -218,9 +218,73 @@ type Key = (f64, f64, KeyEase);
 /// A quarter turn, in the radians `Clip::rotation` is measured in.
 const QUARTER_TURN: f64 = std::f64::consts::FRAC_PI_2;
 
+/// Where a clip already is, so a preset moves it from there instead of
+/// stamping a position of its own on top. An element the user has placed
+/// half a screen to the left must slide in *to that place*, not to the middle.
+#[derive(Clone, Copy, Debug)]
+pub struct Base {
+    pub scale: f64,
+    pub offset_x: f64,
+    pub offset_y: f64,
+    pub rotation: f64,
+    pub opacity: f64,
+}
+
+impl Base {
+    /// A clip's own values: what it shows when nothing is animating it.
+    pub fn of(clip: &Clip) -> Base {
+        Base {
+            scale: clip.scale,
+            offset_x: clip.offset_x,
+            offset_y: clip.offset_y,
+            rotation: clip.rotation,
+            opacity: clip.opacity,
+        }
+    }
+
+    /// A number from the tables below, read as a move from here rather than a
+    /// place on the canvas: a scale is a multiple of what is there, an offset
+    /// and a rotation are shifts from it, and an opacity is a share of it.
+    fn compose(self, property: KeyProperty, value: f64) -> f64 {
+        match property {
+            KeyProperty::Scale => self.scale * value,
+            KeyProperty::Opacity => self.opacity * value,
+            KeyProperty::OffsetX => self.offset_x + value,
+            KeyProperty::OffsetY => self.offset_y + value,
+            KeyProperty::Rotation => self.rotation + value,
+            _ => value,
+        }
+    }
+}
+
+/// Nothing animated yet: the shape a preset has on a clip that sits where the
+/// composition put it, which is what `detect` compares against.
+const NEUTRAL: Base = Base {
+    scale: 1.0,
+    offset_x: 0.0,
+    offset_y: 0.0,
+    rotation: 0.0,
+    opacity: 1.0,
+};
+
 /// The keys a preset writes, per property, inside `span` - the share of the
-/// clip the animation covers, as a fraction.
-fn keys(preset: Preset, side: Side, span: f64) -> Vec<(KeyProperty, Vec<Key>)> {
+/// clip the animation covers, as a fraction - read as moves from `base`.
+fn keys(preset: Preset, side: Side, span: f64, base: Base) -> Vec<(KeyProperty, Vec<Key>)> {
+    raw_keys(preset, side, span)
+        .into_iter()
+        .map(|(property, keys)| {
+            let keys = keys
+                .into_iter()
+                .map(|(at, value, ease)| (at, base.compose(property, value), ease))
+                .collect();
+            (property, keys)
+        })
+        .collect()
+}
+
+/// The tables themselves, before a clip's own placement is composed onto them:
+/// every value here is written as if the clip were at rest in the middle.
+fn raw_keys(preset: Preset, side: Side, span: f64) -> Vec<(KeyProperty, Vec<Key>)> {
     let span = span.clamp(0.02, MAX_SPAN);
     let at = move |part: f64| match side {
         Side::Enter => (span * part).clamp(0.0, 1.0),
@@ -522,8 +586,8 @@ fn keys(preset: Preset, side: Side, span: f64) -> Vec<(KeyProperty, Vec<Key>)> {
         // a caller mistake rather than a curve worth inventing. Each falls back
         // to the side it belongs to, so a stray index still animates something
         // sensible instead of nothing.
-        (preset, _) if preset.runs_during() => keys(preset, Side::During, span),
-        (preset, _) => keys(preset, Side::Enter, span),
+        (preset, _) if preset.runs_during() => raw_keys(preset, Side::During, span),
+        (preset, _) => raw_keys(preset, Side::Enter, span),
     }
 }
 
@@ -546,8 +610,9 @@ pub fn commands(clip: &Clip, preset: Preset, side: Side, seconds: f64) -> Comman
     } else {
         DEFAULT_SECONDS
     };
+    let base = Base::of(clip);
     let mut batch = Vec::new();
-    for (property, keys) in keys(preset, side, span) {
+    for (property, keys) in keys(preset, side, span, base) {
         // Replacing what this side already put there, key by key.
         for key in clip.keys_on(property) {
             if side.owns(key.at) {
@@ -643,14 +708,32 @@ pub fn detect(clip: &Clip, side: Side) -> Option<Preset> {
 /// of the clip, so the same preset is recognised however long it was asked to
 /// run - which is the difference between reading the keys and remembering a
 /// number.
-fn shape(keys: &[(KeyProperty, Key)]) -> Vec<(KeyProperty, i64, f64, KeyEase)> {
+fn shape(keys: &[(KeyProperty, Key)], side: Side) -> Vec<(KeyProperty, i64, f64, KeyEase)> {
     let lo = keys.iter().map(|(_, key)| key.0).fold(f64::MAX, f64::min);
     let hi = keys.iter().map(|(_, key)| key.0).fold(f64::MIN, f64::max);
     let reach = (hi - lo).max(f64::MIN_POSITIVE);
+    // Where the property comes to rest: the head of an exit, the end of an
+    // arrival or a loop. Its own value there is the base the preset was read
+    // from, so taking it back out leaves the shape and drops the placement.
+    let settled = match side {
+        Side::Exit => lo,
+        _ => hi,
+    };
     keys.iter()
         .map(|(property, key)| {
             let part = (key.0 - lo) / reach;
-            (*property, (part * 1e6).round() as i64, key.1, key.2)
+            let rest = keys
+                .iter()
+                .filter(|(other, key)| other == property && (key.0 - settled).abs() < 1e-9)
+                .map(|(_, key)| key.1)
+                .next()
+                .unwrap_or(key.1);
+            let value = match property {
+                KeyProperty::Scale | KeyProperty::Opacity if rest.abs() > 1e-9 => key.1 / rest,
+                KeyProperty::Scale | KeyProperty::Opacity => key.1,
+                _ => key.1 - rest,
+            };
+            (*property, (part * 1e6).round() as i64, value, key.2)
         })
         .collect()
 }
@@ -659,15 +742,15 @@ fn shape(keys: &[(KeyProperty, Key)]) -> Vec<(KeyProperty, i64, f64, KeyEase)> {
 /// written at: the same properties, the same number of keys, the same places
 /// within the stretch, the same values, the same approach.
 fn same_shape(held: &[(KeyProperty, Key)], preset: Preset, side: Side) -> bool {
-    let expected: Vec<(KeyProperty, Key)> = keys(preset, side, DEFAULT_SECONDS)
+    let expected: Vec<(KeyProperty, Key)> = keys(preset, side, DEFAULT_SECONDS, NEUTRAL)
         .into_iter()
         .flat_map(|(property, written)| written.into_iter().map(move |key| (property, key)))
         .collect();
     if expected.len() != held.len() {
         return false;
     }
-    let have = shape(held);
-    let want = shape(&expected);
+    let have = shape(held, side);
+    let want = shape(&expected, side);
     want.iter().all(|(property, part, value, ease)| {
         have.iter()
             .any(|(held_property, held_part, held_value, held_ease)| {
@@ -1006,7 +1089,7 @@ mod tests {
             for side in sides {
                 let mut clip = clip();
                 let span = DEFAULT_SECONDS / clip.duration;
-                for (property, written) in keys(preset, *side, span) {
+                for (property, written) in keys(preset, *side, span, NEUTRAL) {
                     for (at, value, ease) in written {
                         clip.set_key(property, at, value, ease);
                     }
@@ -1033,7 +1116,7 @@ mod tests {
         let mut clip = clip();
         assert_eq!(detect(&clip, Side::Enter), None);
         let span = DEFAULT_SECONDS / clip.duration;
-        for (property, written) in keys(Preset::Fade, Side::Enter, span) {
+        for (property, written) in keys(Preset::Fade, Side::Enter, span, NEUTRAL) {
             for (at, value, ease) in written {
                 clip.set_key(property, at, value, ease);
             }
@@ -1041,5 +1124,60 @@ mod tests {
         assert_eq!(detect(&clip, Side::Enter), Some(Preset::Fade));
         clip.set_key(KeyProperty::Opacity, 0.05, 0.3, KeyEase::LINEAR);
         assert_eq!(detect(&clip, Side::Enter), None, "a hand-moved key");
+    }
+
+    /// A clip placed somewhere other than the middle stays there: a slide moves
+    /// it in from where it is, and an overshoot comes back to where it is, so the
+    /// animation is an offset on top of the composition rather than a new
+    /// position for the element.
+    #[test]
+    fn a_placed_clip_is_moved_from_where_it_is() {
+        let mut placed = clip();
+        placed.offset_x = 0.4;
+        placed.offset_y = -0.25;
+        placed.scale = 1.3;
+        placed.rotation = 0.2;
+        let base = Base::of(&placed);
+        let span = DEFAULT_SECONDS / placed.duration;
+
+        for side in [Side::Enter, Side::Exit] {
+            for preset in [Preset::SlideRight, Preset::SlideDown, Preset::Zoom] {
+                let mut clip = placed.clone();
+                for (property, written) in keys(preset, side, span, base) {
+                    for (at, value, ease) in written {
+                        clip.set_key(property, at, value, ease);
+                    }
+                }
+                // Where it comes to rest is where it was put.
+                let rest = match side {
+                    Side::Enter => 1.0,
+                    _ => 0.0,
+                };
+                let settled: Vec<&concat_project::model::ClipKey> = clip
+                    .keys_on(KeyProperty::OffsetX)
+                    .filter(|key| (key.at - rest).abs() < 1e-9)
+                    .collect();
+                for key in settled {
+                    assert!(
+                        (key.value - 0.4).abs() < 1e-9,
+                        "{preset:?} on {side:?} moved the clip sideways to {}",
+                        key.value
+                    );
+                }
+                let settled: Vec<&concat_project::model::ClipKey> = clip
+                    .keys_on(KeyProperty::OffsetY)
+                    .filter(|key| (key.at - rest).abs() < 1e-9)
+                    .collect();
+                for key in settled {
+                    assert!((key.value - -0.25).abs() < 1e-9, "{preset:?} on {side:?}");
+                }
+                if clip.is_keyed(KeyProperty::Scale) {
+                    let last = clip.keys_on(KeyProperty::Scale).next_back().expect("a key");
+                    let first = clip.keys_on(KeyProperty::Scale).next().expect("a key");
+                    let home = if side == Side::Enter { last } else { first };
+                    assert!((home.value - 1.3).abs() < 1e-9, "{preset:?} on {side:?}");
+                }
+            }
+        }
     }
 }
