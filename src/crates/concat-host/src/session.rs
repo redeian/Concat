@@ -444,21 +444,27 @@ enum Direction {
 /// A project's own media round-trips through the document unchanged, and a
 /// file from outside the folder stays absolute rather than being joined onto
 /// the folder and doubled. `std::path` rules, so the same code holds on
-/// Windows, where a path is absolute without a leading `/`.
+/// Windows, where a path is absolute without a leading `/` - which is why the
+/// paths here are built, not written as POSIX strings.
 #[test]
 fn a_media_path_round_trips_and_an_outside_one_stays_absolute() {
-    let folder = "/projects/one";
-    let inside = "/projects/one/media/clip.mp4";
-    let outside = "/somewhere/else/clip.mp4";
+    let root = std::env::temp_dir().join("projects");
+    let folder = root.join("one");
+    let inside = folder.join("media").join("clip.mp4");
+    let outside = std::env::temp_dir().join("elsewhere").join("clip.mp4");
+    let stored = |path: &std::path::Path| path.to_string_lossy().into_owned();
     let mut document = serde_json::json!({
-        "media": [{"path": inside}, {"path": outside}],
+        "media": [{"path": stored(&inside)}, {"path": stored(&outside)}],
     });
-    media_inside(&mut document, folder, Direction::Relative);
-    assert_eq!(document["media"][0]["path"], "media/clip.mp4");
-    assert_eq!(document["media"][1]["path"], outside);
-    media_inside(&mut document, folder, Direction::Absolute);
-    assert_eq!(document["media"][0]["path"], inside);
-    assert_eq!(document["media"][1]["path"], outside);
+    media_inside(&mut document, &stored(&folder), Direction::Relative);
+    assert_eq!(
+        document["media"][0]["path"],
+        stored(&std::path::Path::new("media").join("clip.mp4"))
+    );
+    assert_eq!(document["media"][1]["path"], stored(&outside));
+    media_inside(&mut document, &stored(&folder), Direction::Absolute);
+    assert_eq!(document["media"][0]["path"], stored(&inside));
+    assert_eq!(document["media"][1]["path"], stored(&outside));
 }
 
 /// Maps every media path in `document` between the form the document stores

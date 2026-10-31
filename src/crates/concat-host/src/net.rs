@@ -394,7 +394,16 @@ mod tests {
             &|request| request,
         )
         .expect_err("nothing answers");
-        assert_eq!(failure.cause, Cause::Refused);
+        // Refused is what a machine whose loopback is untouched answers. A
+        // runner behind a firewall that drops the SYN says nothing at all and
+        // the attempt times out, and that is a fact about the machine, not a
+        // misclassification: what this guards is that a dead server is not
+        // reported as a blocked or a failing one.
+        assert!(
+            matches!(failure.cause, Cause::Refused | Cause::Timeout),
+            "a dead server is refused or unreachable, not {:?}",
+            failure.cause
+        );
         assert_eq!(failure.proxy, None, "loopback never goes through a proxy");
     }
 
