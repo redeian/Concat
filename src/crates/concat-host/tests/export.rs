@@ -607,10 +607,22 @@ impl Studio {
         self.session.save(None).expect("saves the project");
         let reopened = Session::open(self.session.path(), self.session.settings())
             .unwrap_or_else(|error| panic!("{label}: the saved project does not reopen: {error}"));
-        assert!(
-            reopened.flattened_clips() == self.session.flattened_clips(),
-            "{label}: the project flattens differently after a save and reopen"
-        );
+        let before = self.session.flattened_clips();
+        let after = reopened.flattened_clips();
+        if before != after {
+            // Which clip, and which path: a bare "differently" costs a CI round
+            // trip per guess, and the guess is usually wrong.
+            let detail = match before.iter().zip(&after).position(|(a, b)| a != b) {
+                Some(at) => format!(
+                    "clip {at} of {}: {:?}\n  after: {:?}",
+                    before.len(),
+                    before[at].path,
+                    after[at].path
+                ),
+                None => format!("{} clips became {}", before.len(), after.len()),
+            };
+            panic!("{label}: the project flattens differently after a save and reopen\n{detail}");
+        }
 
         Exported::read(
             &label,
