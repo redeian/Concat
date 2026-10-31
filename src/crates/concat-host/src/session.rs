@@ -441,13 +441,33 @@ enum Direction {
     Relative,
 }
 
+/// A project's own media round-trips through the document unchanged, and a
+/// file from outside the folder stays absolute rather than being joined onto
+/// the folder and doubled. `std::path` rules, so the same code holds on
+/// Windows, where a path is absolute without a leading `/`.
+#[test]
+fn a_media_path_round_trips_and_an_outside_one_stays_absolute() {
+    let folder = "/projects/one";
+    let inside = "/projects/one/media/clip.mp4";
+    let outside = "/somewhere/else/clip.mp4";
+    let mut document = serde_json::json!({
+        "media": [{"path": inside}, {"path": outside}],
+    });
+    media_inside(&mut document, folder, Direction::Relative);
+    assert_eq!(document["media"][0]["path"], "media/clip.mp4");
+    assert_eq!(document["media"][1]["path"], outside);
+    media_inside(&mut document, folder, Direction::Absolute);
+    assert_eq!(document["media"][0]["path"], inside);
+    assert_eq!(document["media"][1]["path"], outside);
+}
+
 /// Maps every media path in `document` between the form the document stores
 /// and the form the engine opens. A path inside the project folder is stored
 /// relative (`media/clip.mp4`), so the folder can be moved or handed to
 /// somebody else and still open; anything outside stays absolute, because
 /// guessing where an outside file lives would be a lie.
 fn media_inside(document: &mut serde_json::Value, folder: &str, direction: Direction) {
-    let folder = folder.trim_end_matches('/');
+    let folder_path = std::path::Path::new(folder);
     // `concat.json` keeps the bin at the top level; the API's own document
     // view nests it, so both shapes are read.
     let media = match document
@@ -468,17 +488,25 @@ fn media_inside(document: &mut serde_json::Value, folder: &str, direction: Direc
         let Some(path) = item.get("path").and_then(|path| path.as_str()) else {
             continue;
         };
+        // Platform path rules, not string rules: a Windows path is absolute
+        // without starting with `/`, and its separator is `\`. Comparing the
+        // stored string against `folder/` matched neither, so a file stored
+        // under `C:\…\project` was joined onto the folder a second time on
+        // open - every export test compares the flatten after a save and a
+        // reopen, and on Windows every one of them differed.
+        let stored = std::path::Path::new(path);
         let mapped = match direction {
             Direction::Absolute => {
-                if path.starts_with('/') {
+                if stored.is_absolute() {
                     None
                 } else {
-                    Some(format!("{folder}/{path}"))
+                    Some(folder_path.join(stored).to_string_lossy().into_owned())
                 }
             }
-            Direction::Relative => path
-                .strip_prefix(&format!("{folder}/"))
-                .map(|rest| rest.to_owned()),
+            Direction::Relative => stored
+                .strip_prefix(folder_path)
+                .ok()
+                .map(|rest| rest.to_string_lossy().into_owned()),
         };
         if let Some(mapped) = mapped
             && let Some(slot) = item.get_mut("path")
