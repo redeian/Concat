@@ -104,6 +104,12 @@ pub struct Clip {
     /// The shape that keeps part of the picture, when one does; its
     /// numbers ride the animation's mask tracks.
     pub mask: Option<ShapeMask>,
+    /// How many times the frame the picture is drawn for, along the axis
+    /// it is most: one - every picture but a title whose ink runs past the
+    /// frame's edges, painted on a canvas grown to hold it. A picture past
+    /// one is drawn at one of its pixels to one of the frame's, centred on
+    /// the clip's centre, where any other is fitted inside the frame.
+    pub overscan: f64,
 }
 
 /// How a layer's colour meets what is beneath it.
@@ -227,6 +233,7 @@ impl Clip {
             blend: Blend::Normal,
             hold: false,
             mask: None,
+            overscan: 1.0,
         }
     }
 
@@ -380,6 +387,11 @@ pub struct Timeline {
     pub width: u32,
     /// Output height in pixels.
     pub height: u32,
+    /// What shows where no picture covers the frame, as eight-bit straight
+    /// `[r, g, b, a]`: the project's canvas colour, opaque black unless it
+    /// was given another, and clear for an overlay. A transition to black
+    /// still goes to black.
+    pub canvas: [u8; 4],
     tracks: Arena<Track>,
     clips: Arena<Clip>,
     order: Vec<TrackId>,
@@ -392,6 +404,7 @@ impl Timeline {
             frame_rate,
             width,
             height,
+            canvas: [0, 0, 0, 255],
             tracks: Arena::new(),
             clips: Arena::new(),
             order: Vec::new(),

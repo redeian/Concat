@@ -298,8 +298,11 @@ impl Painter {
             Drawing::Title(pass) => {
                 let (title, reveal) = self.title(width, height)?;
                 let ground = PlannedLayer::picture(detached_clip(), Arc::clone(&self.still));
+                let overscan = (title.width() as f32 / width as f32)
+                    .max(title.height() as f32 / height as f32);
                 let mut words = PlannedLayer::picture(detached_clip(), title);
                 words.track = 1;
+                words.overscan = overscan;
                 let mut pass = pass.clone();
                 pass.reveal_map = Some(reveal);
                 words.effects = vec![pass];
@@ -339,6 +342,8 @@ impl Painter {
             font_size: 0.26,
             font_weight: 800.0,
             italic: false,
+            underline: false,
+            strikethrough: false,
             color: "#ffffff".to_owned(),
             align: concat_text::Align::Center,
             stroke_width: 0.0,
@@ -352,6 +357,7 @@ impl Painter {
             tracking: 0.0,
             max_width: 0.0,
             max_height: 0.0,
+            runs: Vec::new(),
         };
         let fonts = concat_text::Fonts::new();
         let rendered = concat_text::render_frame(&fonts, &style, width, height)
@@ -361,7 +367,13 @@ impl Painter {
             .iter()
             .map(|word| (word.x, word.y, word.width, word.height))
             .collect();
-        let reveal = Arc::new(RevealMap::from_rects(width, height, &rects));
+        // The canvas's size, which is the still's unless the words ran
+        // past its edges.
+        let reveal = Arc::new(RevealMap::from_rects(
+            rendered.width,
+            rendered.height,
+            &rects,
+        ));
         let frame = Arc::new(
             Frame::from_rgba(rendered.width, rendered.height, rendered.rgba)
                 .ok_or("the title came back the wrong size")?,

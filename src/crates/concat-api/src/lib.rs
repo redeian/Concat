@@ -577,6 +577,7 @@ impl Api {
             video.height,
             video.rate_num,
             video.rate_den,
+            video.canvas,
         )
         .map_err(ApiError::failed)?;
         self.adopt(info)
@@ -738,7 +739,7 @@ impl Api {
             None if hdr => export::VideoCodec::Hevc,
             None => export::VideoCodec::H264,
             Some(name) => export::VideoCodec::parse(name).ok_or_else(|| {
-                ApiError::invalid(format!("unknown codec {name:?}: h264, hevc or av1"))
+                ApiError::invalid(format!("unknown codec {name:?}: h264, hevc, av1, prores-4444 or vp9-alpha"))
             })?,
         };
         if hdr && codec == export::VideoCodec::H264 {
@@ -911,6 +912,7 @@ impl Api {
                     moving: false,
                     proxy: false,
                     color_space: session.video().color_space,
+                    canvas: session.video().canvas,
                 },
             )
             .map_err(ApiError::failed)?;
@@ -1392,6 +1394,7 @@ mod tests {
             location: location.clone(),
             name: "Round trip".to_owned(),
             video: Some(VideoSettings {
+                canvas: [0, 0, 0, 255],
                 width: 1080,
                 height: 1920,
                 rate_num: 60,

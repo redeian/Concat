@@ -19,26 +19,60 @@ import "../../concat-text/fonts/HankenGrotesk-Italic.ttf";
 import { Theme } from "theme/theme.slint";
 import { Bezier, Curves, Fmt, Focus, Payload } from "util.slint";
 import { EffectData } from "demo/effects-panel.slint";
-import { MediaFilter, MediaItemData, MediaKind, SourcePreview, TextPresetData } from "workspace/media-pane.slint";
-import { SoundCardData, Sounds, VoiceCardData } from "workspace/audio-page.slint";
-import { ContextMenu, MenuItemData, MenuRow } from "primitives/context-menu.slint";
+import {
+    MediaFilter,
+    MediaItemData,
+    MediaKind,
+    SourcePreview,
+    TextPresetData,
+} from "workspace/media-pane.slint";
+import {
+    SoundCardData,
+    Sounds,
+    VoiceCardData,
+} from "workspace/audio-page.slint";
+import {
+    ContextMenu,
+    MenuItemData,
+    MenuRow,
+} from "primitives/context-menu.slint";
 import { ExportData, ExportDialog, ExportPhase } from "dialogs/export.slint";
-import { ModelData, SettingsData, SettingsDialog, SystemFactData } from "dialogs/settings.slint";
+import {
+    ModelData,
+    SettingsData,
+    SettingsDialog,
+    SystemFactData,
+} from "dialogs/settings.slint";
 import { ProjectDialog, ProjectSheetData } from "dialogs/project.slint";
-import { RelinkDialog, RelinkData, MissingMediaItem } from "dialogs/relink.slint";
+import {
+    RelinkDialog,
+    RelinkData,
+    MissingMediaItem,
+} from "dialogs/relink.slint";
 import { ConfirmData, ConfirmDialog } from "dialogs/confirm.slint";
 import { CaptionsDialog, CaptionsSheetData } from "dialogs/captions.slint";
 import { SpeechDialog, SpeechSheetData } from "dialogs/speech.slint";
+import { NewVoiceData, NewVoiceDialog } from "dialogs/new-voice.slint";
 import { AvatarData } from "primitives/avatar.slint";
 import { VoiceoverData, VoiceoverPanel } from "dialogs/voiceover.slint";
 import { DockDivider, DockSide, SeatBox } from "dock.slint";
 import { Editor } from "editor.slint";
 import { PaneKind, Panes } from "workspace/pane-switcher.slint";
-import { ChipOption, NewProjectDialog, RecentProjectData, StartData, StartScreen } from "start.slint";
+import {
+    ChipOption,
+    NewProjectDialog,
+    RecentProjectData,
+    StartData,
+    StartScreen,
+} from "start.slint";
 import { TitleBar } from "title-bar.slint";
 import { PhoneEditor, PhoneSheets } from "phone/editor.slint";
 import {
-    AppliedEntryData, AppliedParamData, CatalogueEntryData, Library, LibraryViewData,
+    AppliedEntryData,
+    AppliedParamData,
+    CatalogueEntryData,
+    Library,
+    LibraryViewData,
     TransitionChoiceData,
 } from "inspector/clip-inspector.slint";
 import { ParamFormat } from "inspector/controls.slint";
@@ -48,29 +82,104 @@ import { FontSearch } from "inspector/font-picker.slint";
 import { Meters } from "timeline/vu-meter.slint";
 import { Workspace } from "workspace/workspace.slint";
 import {
-    Backdrop, BackdropData, ClipData, ClipField, ClipKeyData, ClipKind, ClipTextField, DropData, Keyframes,
-    SelectedClipData, SelectedTransitionData, StageGuideData, StageItemData, TextAlignment, TimelineTabData,
-    TimelineTool, TrackData, TrackSize,
+    Backdrop,
+    BackdropData,
+    ClipData,
+    ClipField,
+    ClipKeyData,
+    ClipKind,
+    ClipTextField,
+    DropData,
+    Keyframes,
+    SelectedClipData,
+    SelectedTransitionData,
+    StageGuideData,
+    StageItemData,
+    TextAlignment,
+    TimelineTabData,
+    TimelineTool,
+    TrackData,
+    TrackSize,
 } from "timeline/model.slint";
 
 // Re-exported so main.rs can reach the globals and the struct.
-import { KeyEditor, KeyMarkData, KeyRowData } from "workspace/keyframes-pane.slint";
+import {
+    KeyEditor,
+    KeyMarkData,
+    KeyRowData,
+} from "workspace/keyframes-pane.slint";
 import { SpeedRamp } from "inspector/speed-ramp.slint";
 
 export {
-    Curves, Fmt, Focus, Payload, Theme, Bezier, Editor, I18n,
-    AppliedEntryData, AppliedParamData, CatalogueEntryData, Library, LibraryViewData, ParamFormat,
+    Curves,
+    Fmt,
+    Focus,
+    Payload,
+    Theme,
+    Bezier,
+    Editor,
+    I18n,
+    AppliedEntryData,
+    AppliedParamData,
+    CatalogueEntryData,
+    Library,
+    LibraryViewData,
+    ParamFormat,
     TransitionChoiceData,
-    DockDivider, DockSide, PaneKind, SeatBox,
-    EffectData, FontSearch, Meters, MediaFilter, MediaItemData, MediaKind, SourcePreview, TextPresetData,
-    Backdrop, BackdropData, ClipData, ClipField, ClipKeyData, ClipKind, ClipTextField, DropData, Keyframes,
-    KeyEditor, KeyMarkData, KeyRowData, SpeedRamp,
-    SelectedClipData, SelectedTransitionData, StageGuideData, StageItemData, TextAlignment, TimelineTabData,
-    TimelineTool, TrackData, TrackSize, MenuItemData, MenuRow, ExportData, ExportPhase, ModelData, SettingsData,
-    ChipOption, RecentProjectData, StartData, SystemFactData, ToastData, ProjectSheetData,
-    CaptionsSheetData, SpeechSheetData, VoiceoverData, SoundCardData, Sounds, VoiceCardData,
+    DockDivider,
+    DockSide,
+    PaneKind,
+    SeatBox,
+    EffectData,
+    FontSearch,
+    Meters,
+    MediaFilter,
+    MediaItemData,
+    MediaKind,
+    SourcePreview,
+    TextPresetData,
+    Backdrop,
+    BackdropData,
+    ClipData,
+    ClipField,
+    ClipKeyData,
+    ClipKind,
+    ClipTextField,
+    DropData,
+    Keyframes,
+    KeyEditor,
+    KeyMarkData,
+    KeyRowData,
+    SpeedRamp,
+    SelectedClipData,
+    SelectedTransitionData,
+    StageGuideData,
+    StageItemData,
+    TextAlignment,
+    TimelineTabData,
+    TimelineTool,
+    TrackData,
+    TrackSize,
+    MenuItemData,
+    MenuRow,
+    ExportData,
+    ExportPhase,
+    ModelData,
+    SettingsData,
+    ChipOption,
+    RecentProjectData,
+    StartData,
+    SystemFactData,
+    ToastData,
+    ProjectSheetData,
+    CaptionsSheetData,
+    SpeechSheetData,
+    VoiceoverData,
+    SoundCardData,
+    Sounds,
+    VoiceCardData,
+    NewVoiceData,
 }
-
 export component App inherits Window {
     title: "Concat";
     // The taskbar's and Alt-Tab's picture on Windows, and the window
@@ -123,7 +232,7 @@ export component App inherits Window {
     }
     property <bool> sheet-open: root.export.open || root.settings.open
         || root.project-sheet.open || root.captions.open || root.speech.open
-        || root.start.composing;
+        || root.start.composing || root.new-voice.open;
     changed sheet-open => {
         if (!root.sheet-open) {
             keys.focus();
@@ -159,6 +268,7 @@ export component App inherits Window {
     callback start-custom-width-edited(width: float);
     callback start-custom-height-edited(height: float);
     callback start-custom-fps-edited(fps: float);
+    callback start-canvas-changed(value: color);
     callback start-create();
     /// Open a project that already exists, picked from disk.
     callback start-open();
@@ -294,6 +404,8 @@ export component App inherits Window {
     callback model-download(id: string);
     callback model-cancel(id: string);
     callback model-remove(id: string);
+    callback model-open-link(id: string);
+    callback model-choose-file(id: string);
 
     callback open-settings();
     callback export-clicked();
@@ -308,6 +420,7 @@ export component App inherits Window {
     callback project-custom-height-edited(height: float);
     callback project-custom-fps-edited(fps: float);
     callback project-color-space-changed(index: int);
+    callback project-canvas-changed(value: color);
     callback project-apply();
 
     /// The two speech sheets: captions from a clip's sound, and a title's
@@ -357,6 +470,16 @@ export component App inherits Window {
     callback speech-pick-picture();
     callback speech-save-voice();
     callback speech-clear-style();
+
+    /// The Voices shelf's New voice sheet: a recording picked to be kept
+    /// as a voice; see NewVoiceDialog.
+    in property <NewVoiceData> new-voice;
+    callback new-voice-closed();
+    callback new-voice-name-edited(name: string);
+    callback new-voice-description-edited(text: string);
+    callback new-voice-start-changed(seconds: float);
+    callback new-voice-pick-picture();
+    callback new-voice-save();
 
     /// The voiceover panel; see VoiceoverPanel. Its meter and clock come
     /// on the Editor global, from a timer.
@@ -458,16 +581,19 @@ export component App inherits Window {
             enabled: !root.on-start && !root.macos && !root.phone;
             activated => { root.open-menu-from-keys(0); }
         }
+
         KeyBinding {
             keys: @keys(Alt + F);
             enabled: !root.on-start && !root.macos && !root.phone;
             activated => { root.open-menu-from-keys(0); }
         }
+
         KeyBinding {
             keys: @keys(Alt + E);
             enabled: !root.on-start && !root.macos && !root.phone;
             activated => { root.open-menu-from-keys(1); }
         }
+
         KeyBinding {
             keys: @keys(Alt + V);
             enabled: !root.on-start && !root.macos && !root.phone;
@@ -489,6 +615,7 @@ export component App inherits Window {
                 root.app-menu-selected(root.macos ? "close-window" : "close-project");
             }
         }
+
         KeyBinding {
             keys: @keys(Control + Q);
             enabled: !root.macos;
@@ -514,6 +641,10 @@ export component App inherits Window {
             if (event.text == Key.Escape || event.text == Key.Back) {
                 if (root.confirm.open) { root.confirm-dismissed(); return accept; }
                 if (root.relink.open) { root.relink-dismiss(); return accept; }
+                if (root.new-voice.open) {
+                    if (!root.new-voice.saving) { root.new-voice-closed(); }
+                    return accept;
+                }
                 if (root.project-sheet.open) { root.project-closed(); return accept; }
                 if (root.settings.open) { root.settings-closed(); return accept; }
                 if (root.export.open) {
@@ -814,6 +945,7 @@ export component App inherits Window {
         custom-width-edited(width) => { root.start-custom-width-edited(width); }
         custom-height-edited(height) => { root.start-custom-height-edited(height); }
         custom-fps-edited(fps) => { root.start-custom-fps-edited(fps); }
+        canvas-changed(value) => { root.start-canvas-changed(value); }
         create => { root.start-create(); }
         dismiss-error => { root.start-dismiss-error(); }
     }
@@ -907,6 +1039,8 @@ export component App inherits Window {
         model-download(id) => { root.model-download(id); }
         model-cancel(id) => { root.model-cancel(id); }
         model-remove(id) => { root.model-remove(id); }
+        model-open-link(id) => { root.model-open-link(id); }
+        model-choose-file(id) => { root.model-choose-file(id); }
     }
 
     in property <RelinkData> relink;
@@ -933,7 +1067,30 @@ export component App inherits Window {
         custom-height-edited(height) => { root.project-custom-height-edited(height); }
         custom-fps-edited(fps) => { root.project-custom-fps-edited(fps); }
         color-space-changed(index) => { root.project-color-space-changed(index); }
+        canvas-changed(value) => { root.project-canvas-changed(value); }
         apply => { root.project-apply(); }
+    }
+
+    // Over the Audio page it was opened from, and over the tool cards,
+    // which may be open beside the page on a desk.
+    NewVoiceDialog {
+        fill: root.sheets-fill;
+        inset-top: root.safe-area-insets.top;
+        inset-bottom: root.safe-area-insets.bottom;
+        inset-left: root.safe-area-insets.left;
+        inset-right: root.safe-area-insets.right;
+        x: 0;
+        y: 0;
+        width: root.width;
+        height: root.height;
+        data: root.new-voice;
+
+        closed => { root.new-voice-closed(); }
+        name-edited(name) => { root.new-voice-name-edited(name); }
+        description-edited(text) => { root.new-voice-description-edited(text); }
+        start-changed(seconds) => { root.new-voice-start-changed(seconds); }
+        pick-picture => { root.new-voice-pick-picture(); }
+        save => { root.new-voice-save(); }
     }
 
     RelinkDialog {
@@ -966,7 +1123,6 @@ export component App inherits Window {
         confirmed => { root.confirm-accepted(); }
         dismissed => { root.confirm-dismissed(); }
     }
-
 
     // Over the workspace and both sheets, under the menus. A tooltip has to
     // clear the pane it belongs to — panes clip — and it has no business over

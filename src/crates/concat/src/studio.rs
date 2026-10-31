@@ -75,12 +75,16 @@ use crate::speed_ramp;
 use crate::ui::*;
 use concat_host::updates;
 
-/// The monitor's output sizes, matching the picker's rows.
-pub const OUTPUTS: [(i32, i32); 6] = [
+/// The monitor's output sizes, matching the picker's rows. 4:5 and 3:4
+/// are the upright frames an Instagram post is cut to: its feed and its
+/// grid. Typing 1080 x 1350 by hand was the only way to them.
+pub const OUTPUTS: [(i32, i32); 8] = [
     (1920, 1080),
     (3840, 2160),
     (1080, 1920),
     (1080, 1080),
+    (1080, 1350),
+    (1080, 1440),
     (1440, 1080),
     (2560, 1080),
 ];
@@ -252,11 +256,18 @@ pub(crate) const AUDIO_BPS: f32 = 192_000.0;
 /// cut at 4K was not a thing the form could ask for. Every pair of indices
 /// resolves through [`frame_size`], which is the one place that knows what
 /// a label means in pixels.
-pub const ASPECTS: [(&str, u32, u32); 4] = [
+///
+/// 4:5 and 3:4 are an Instagram post's feed and grid frames. 21:9 is the
+/// 64:27 every screen sold as 21:9 is, so it lands on the 2560 x 1080 the
+/// monitor's picker calls 21:9 rather than a 2520 of its own.
+pub const ASPECTS: [(&str, u32, u32); 7] = [
     ("16:9", 16, 9),
     ("9:16", 9, 16),
     ("1:1", 1, 1),
+    ("4:5", 4, 5),
+    ("3:4", 3, 4),
     ("4:3", 4, 3),
+    ("21:9", 64, 27),
 ];
 
 /// The sizes, as the *short* edge in pixels.
@@ -858,6 +869,10 @@ pub fn sync<T: Clone + PartialEq + 'static>(model: &VecModel<T>, next: Vec<T>) {
     }
 }
 
+/// Seconds of the original an enhanced copy covers beyond each end of the
+/// clip it was made for, so a small trim after does not run off the copy.
+const ENHANCE_MARGIN: f64 = 1.0;
+
 /// The window's state. See the module docs for what is whose.
 pub struct Studio {
     pub host: Host,
@@ -1036,6 +1051,13 @@ pub struct Studio {
     /// The clips the echo was written for; see `commit_now`. Several when
     /// the inspector edits every selected title at once.
     commit_targets: Vec<String>,
+    /// The words of the selected title that the Text tab's styling
+    /// controls are aimed at - (clip, start, end) in characters of its
+    /// content - while some are selected in its text box. None styles the
+    /// whole title, as the tab always did. Kept when the box loses focus,
+    /// since reaching for the colour swatch is what blurs it; read only
+    /// while that clip is still the one selected.
+    words: Option<(String, usize, usize)>,
     commit_timer: slint::Timer,
     /// What the catalogue shelves were last built from; while nothing in
     /// it changes the shelves are not rebuilt.
@@ -1240,6 +1262,15 @@ fn align_of(align: TextAlign) -> TextAlignment {
     }
 }
 
+/// The character a byte offset falls at in `text`, as a text box counts
+/// its caret: bytes, where the document's runs count characters. An
+/// offset inside a character counts that character; one past the end or
+/// below zero is held to the text.
+fn char_at(text: &str, byte: i32) -> usize {
+    let byte = usize::try_from(byte).unwrap_or(0);
+    text.char_indices().take_while(|(at, _)| *at < byte).count()
+}
+
 /// A title as it is first placed: the embedded face, centred, white.
 fn new_title_style(prefs: &crate::prefs::Preferences) -> TextStyle {
     // The look a title was kept as, when one was (see
@@ -1251,6 +1282,7 @@ fn new_title_style(prefs: &crate::prefs::Preferences) -> TextStyle {
     });
     TextStyle {
         content: t("studio.newTitle"),
+        runs: Vec::new(),
         ..base
     }
 }
@@ -2564,6 +2596,7 @@ impl Studio {
             flat: None,
             commit_pending: false,
             commit_targets: Vec::new(),
+            words: None,
             commit_timer: slint::Timer::default(),
             shelf_stamp: std::cell::RefCell::new(None),
             look_art: std::cell::RefCell::new(HashMap::new()),
@@ -2840,6 +2873,22 @@ impl Studio {
         }) as f32
     }
 
+    /// The edit point next to the playhead - the nearest clip start or end
+    /// on any lane, the origin or the project's end - after it when
+    /// `forward`, before it otherwise; the playhead itself when there is
+    /// none that way. Counted in whole frames, so a playhead parked on a
+    /// cut is on it and the next press goes on to the one beyond, however
+    /// the seconds round. Up and Down, as Premiere and Resolve put them.
+    pub fn edit_point(&self, forward: bool) -> f32 {
+        let spans: Vec<(f64, f64)> = self
+            .timeline()
+            .clips
+            .iter()
+            .map(|clip| (clip.start, clip.duration))
+            .collect();
+        edit_point(&spans, self.playhead, self.frame_rate(), forward)
+    }
+
     /// Clip edges, the playhead and zero all pull, and the nearest inside
     /// the threshold wins.
     /// How far a moving set of clips should shift so the nearest of its
@@ -3046,6 +3095,7 @@ impl Studio {
     pub fn undo(&mut self) {
         self.flush_commit();
         self.echo = None;
+        self.words = None;
         if let Some(session) = self.session.as_mut()
             && session.can_undo()
         {
@@ -3057,6 +3107,7 @@ impl Studio {
     pub fn redo(&mut self) {
         self.flush_commit();
         self.echo = None;
+        self.words = None;
         if let Some(session) = self.session.as_mut()
             && session.can_redo()
         {
@@ -5672,6 +5723,14 @@ impl Studio {
     /// One field of the selected clip, on the echo. `clip_commit` turns the
     /// accumulated edits into commands.
     pub fn clip_set(&mut self, field: ClipField, value: f32) {
+        // Some words selected in the text box: the typography they can
+        // wear goes on those words alone.
+        if let Some((id, start, end)) = self.styled_words()
+            && let Some(patch) = self.word_patch(&id, field, f64::from(value))
+        {
+            self.style_words(&id, start, end, &patch);
+            return;
+        }
         let mut ids = self.edit_targets();
         // A batch of sounds takes the level alone; see `batch_volume`.
         let batch_volume = ids.is_empty() && field == ClipField::Volume;
@@ -5888,6 +5947,16 @@ impl Studio {
                 ClipField::FontSize => text.font_size = value.clamp(0.01, 0.5),
                 ClipField::FontWeight => text.font_weight = value.clamp(100.0, 900.0),
                 ClipField::Italic => text.italic = value != 0.0,
+                ClipField::Underline => text.underline = value != 0.0,
+                ClipField::Strikethrough => text.strikethrough = value != 0.0,
+                ClipField::TextCase => {
+                    text.text_case = match value as i32 {
+                        1 => model::TextCase::Upper,
+                        2 => model::TextCase::Lower,
+                        3 => model::TextCase::Sentence,
+                        _ => model::TextCase::Original,
+                    };
+                }
                 ClipField::TextOpacity => text.opacity = value.clamp(0.0, 1.0),
                 ClipField::Align => {
                     text.align = match value as i32 {
@@ -5940,6 +6009,19 @@ impl Studio {
     }
 
     pub fn clip_set_text(&mut self, field: ClipTextField, value: &str) {
+        self.set_text_at(field, value, None);
+    }
+
+    /// The words typed into the Text tab's box, with where the caret ended
+    /// up - a byte into `value`, as the box counts - so a run beside the
+    /// edit knows whether the new letters are its own; see
+    /// `concat_project::runs`.
+    pub fn clip_set_words(&mut self, value: &str, caret: i32) {
+        let caret = (caret >= 0).then(|| char_at(value, caret));
+        self.set_text_at(ClipTextField::Content, value, caret);
+    }
+
+    fn set_text_at(&mut self, field: ClipTextField, value: &str, caret: Option<usize>) {
         let ids = self.edit_targets();
         if ids.is_empty() {
             return;
@@ -5967,7 +6049,8 @@ impl Studio {
             let text = clip.text.get_or_insert_with(TextStyle::default);
             match field {
                 ClipTextField::Content => {
-                    text.content = value.to_owned();
+                    // The runs ride along with the words they are on.
+                    text.set_content(value.to_owned(), caret);
                     let first = value.lines().next().unwrap_or("").trim().to_owned();
                     clip.name = if first.is_empty() {
                         "Title".into()
@@ -6108,6 +6191,16 @@ impl Studio {
     }
 
     pub fn clip_set_colour(&mut self, field: ClipTextField, value: slint::Color) {
+        if field == ClipTextField::Color
+            && let Some((id, start, end)) = self.styled_words()
+        {
+            let patch = model::RunStyle {
+                color: Some(hex_of(value)),
+                ..model::RunStyle::default()
+            };
+            self.style_words(&id, start, end, &patch);
+            return;
+        }
         let ids = self.edit_targets();
         if ids.is_empty() {
             return;
@@ -6131,6 +6224,97 @@ impl Studio {
         }
     }
 
+    // ── styled words ──
+    //
+    // A title is one look, and over it some of its words can wear their
+    // own: drag over them in the Text tab's box and the colour, B/I/U/S
+    // and size go on those words alone, the way After Effects recolours
+    // a dragged-over word. They are runs on the title's style, kept
+    // with the words as they are typed; see `concat_project::runs`.
+
+    /// The text box's selection, from the box: where its anchor and its
+    /// cursor are, as bytes into its words. A selection with nothing in it
+    /// - a caret - styles the whole title again.
+    pub fn select_words(&mut self, anchor: i32, cursor: i32) {
+        let Some(id) = self.sole_selection() else {
+            self.words = None;
+            return;
+        };
+        let Some(content) = self
+            .clip(&id)
+            .filter(|clip| clip.kind == model::ClipKind::Text)
+            .and_then(|clip| clip.text.as_ref())
+            .map(|text| text.content.clone())
+        else {
+            self.words = None;
+            return;
+        };
+        let (anchor, cursor) = (char_at(&content, anchor), char_at(&content, cursor));
+        let (start, end) = (anchor.min(cursor), anchor.max(cursor));
+        self.words = (start < end).then_some((id, start, end));
+    }
+
+    /// The selected words the styling controls are aimed at, while there
+    /// are some on the title still selected alone: (clip, start, end) in
+    /// characters, clamped to its words.
+    fn styled_words(&self) -> Option<(String, usize, usize)> {
+        let (id, start, end) = self.words.as_ref()?;
+        if self.sole_selection().as_deref() != Some(id.as_str()) {
+            return None;
+        }
+        let text = self
+            .clip(id)
+            .filter(|clip| clip.kind == model::ClipKind::Text)?
+            .text
+            .as_ref()?;
+        let count = text.char_count();
+        let (start, end) = ((*start).min(count), (*end).min(count));
+        (start < end).then(|| (id.clone(), start, end))
+    }
+
+    /// What a typography control means for some words: the override it
+    /// lays on them, or none for a control that is the whole title's -
+    /// its outline, its box, its alignment. A size is kept relative to the
+    /// title's, so the words stay bigger by as much when the title grows.
+    fn word_patch(&self, id: &str, field: ClipField, value: f64) -> Option<model::RunStyle> {
+        let mut patch = model::RunStyle::default();
+        match field {
+            ClipField::FontSize => {
+                let size = self.clip(id)?.text.as_ref()?.font_size.max(0.005);
+                patch.font_scale = Some(value.clamp(0.01, 0.5) / size);
+            }
+            ClipField::FontWeight => patch.font_weight = Some(value.clamp(100.0, 900.0)),
+            ClipField::Italic => patch.italic = Some(value != 0.0),
+            ClipField::Underline => patch.underline = Some(value != 0.0),
+            ClipField::Strikethrough => patch.strikethrough = Some(value != 0.0),
+            _ => return None,
+        }
+        Some(patch)
+    }
+
+    /// Lays `patch` over the characters `start..end` of a title, on the
+    /// echo, for the inspector's commit to land as one step.
+    fn style_words(&mut self, id: &str, start: usize, end: usize, patch: &model::RunStyle) {
+        self.commit_targets = vec![id.to_owned()];
+        self.begin_echo();
+        if let Some(text) = self.echo_clip_mut(id).and_then(|clip| clip.text.as_mut()) {
+            text.style_range(start, end, patch);
+        }
+    }
+
+    /// The selected words back in the title's own look.
+    pub fn reset_words(&mut self) {
+        let Some((id, start, end)) = self.styled_words() else {
+            return;
+        };
+        self.commit_targets = vec![id.clone()];
+        self.begin_echo();
+        if let Some(text) = self.echo_clip_mut(&id).and_then(|clip| clip.text.as_mut()) {
+            text.clear_range(start, end);
+        }
+        self.clip_commit();
+    }
+
     /// The selected title's look becomes the one new titles start from,
     /// and the one generated captions are set in: its family, weight,
     /// colours, stroke, shadow and background, never its words. Kept in
@@ -6146,7 +6330,10 @@ impl Studio {
         else {
             return;
         };
+        // The words are this title's own, and so are the looks of some of
+        // them: a run says nothing about another title's words.
         style.content.clear();
+        style.runs.clear();
         self.prefs.title_style = Some(style);
         self.prefs.save(&self.host.dirs);
         self.notify(&t("textPanel.newTitlesUseThisStyle"), false);
@@ -7684,10 +7871,13 @@ impl Studio {
             return;
         }
         let factor = self.enhance_factor(&media);
+        // The moment under the playhead in the original's seconds, which is
+        // the file the preview reads, the clip may be showing a copy of a
+        // span that starts partway into it.
         let seconds = if clip.kind == model::ClipKind::Image {
             0.0
         } else {
-            self.source_at_playhead(&clip)
+            self.source_at_playhead(&clip) + Self::original_start(&clip) - clip.source_start
         };
         let request = concat_host::enhance::PreviewRequest {
             media_path: media.path.clone(),
@@ -7790,8 +7980,18 @@ impl Studio {
         let factor = self.enhance_factor(&media);
         let strength = self.enhance_strength;
         let still = clip.kind == model::ClipKind::Image;
+        // The span the clip shows of the original, and a second either side
+        // so a small trim after is still inside the copy: the work is the
+        // clip's, not the whole file's.
+        let span = (!still).then(|| {
+            let start = Self::original_start(&clip);
+            let covered = clip.duration * clip.speed;
+            let from = (start - ENHANCE_MARGIN).max(0.0);
+            let to = (start + covered + ENHANCE_MARGIN).min(media.duration.unwrap_or(f64::MAX));
+            (from, (to - from).max(covered))
+        });
         let Some(target) =
-            concat_host::enhance::target_for(&project, &media.path, factor, strength, still)
+            concat_host::enhance::target_for(&project, &media.path, factor, strength, still, span)
         else {
             self.notify(&tf("studio.couldNotRead", &[&media.path]), true);
             return;
@@ -7802,6 +8002,7 @@ impl Studio {
             factor,
             strength,
             target,
+            span,
         };
         let percent = concat_host::enhance::strength_percent(strength);
         let clip_id = clip.id.clone();
@@ -7848,7 +8049,8 @@ impl Studio {
                 match result {
                     Ok(path) if ticked => {
                         studio.enhance_ticked.remove(&clip_id);
-                        studio.adopt_enhanced(&clip_id, &path, factor, percent);
+                        let offset = span.map_or(0.0, |(start, _)| start);
+                        studio.adopt_enhanced(&clip_id, &path, factor, percent, offset);
                     }
                     Ok(_) => {}
                     Err(error) if error.contains("cancelled") => {}
@@ -7972,14 +8174,43 @@ impl Studio {
             item,
             source_start: Some(0.0),
             enhanced: false,
+            offset: 0.0,
         });
         self.request_preview();
         self.notify(&t("studio.reversedClipNowShows"), false);
     }
 
+    /// Clip `clip`'s in-point in its original's seconds: its own, or, while
+    /// it shows an enhanced copy of a span, its own moved by where that
+    /// copy starts.
+    fn original_start(clip: &Clip) -> f64 {
+        match &clip.enhanced {
+            Some(link) if link.on => clip.source_start + link.offset,
+            _ => clip.source_start,
+        }
+    }
+
     /// Points clip `id` at the enhanced copy at `path`, probed the way an
     /// import is, and shows it.
-    fn adopt_enhanced(&mut self, id: &str, path: &std::path::Path, factor: u32, percent: u32) {
+    fn adopt_enhanced(
+        &mut self,
+        id: &str,
+        path: &std::path::Path,
+        factor: u32,
+        percent: u32,
+        offset: f64,
+    ) {
+        let Some(clip) = self.clip(id).cloned() else {
+            return;
+        };
+        // The clip's in-point in the copy, which starts `offset` into the
+        // original; a clip moved off the copy's span while it was made is
+        // left as it is rather than pointed past the copy's ends.
+        let start = Self::original_start(&clip) - offset;
+        if start < -1e-6 {
+            self.notify(&t("studio.clipChangedWhileBeing"), true);
+            return;
+        }
         let summary = match media::probe(&path.to_string_lossy()) {
             Ok(summary) => summary,
             Err(error) => {
@@ -7994,11 +8225,18 @@ impl Studio {
         if let Some(original) = self.clip(id).and_then(|clip| self.enhance_source(clip)) {
             item.name = format!("{} (enhanced {factor}x, {percent}%)", original.name);
         }
+        if let Some(length) = item.duration
+            && start + clip.duration * clip.speed > length + 1e-3
+        {
+            self.notify(&t("studio.clipChangedWhileBeing"), true);
+            return;
+        }
         self.apply(Command::ReplaceClipMedia {
             clip_id: id.to_owned(),
             item,
-            source_start: None,
+            source_start: Some(start.max(0.0)),
             enhanced: true,
+            offset,
         });
         self.request_preview();
         self.notify(&t("studio.enhancedClipNowShows"), false);
@@ -8337,6 +8575,7 @@ impl Studio {
             moving: false,
             proxy: false,
             color_space: self.project().active().video.color_space,
+            canvas: self.project().active().video.canvas,
         };
         let monitor = self.host.monitor.clone();
         let out_dir = project_dir.join("frames");
@@ -9757,15 +9996,16 @@ impl Studio {
     }
 
     /// Whether a sheet covers the editor - Export, Settings, the project
-    /// sheet, a relink or a question - so the editor's keys are not its
-    /// own. The tool cards are not sheets: the timeline is worked beside
-    /// them.
+    /// sheet, a relink, a question or the Voices shelf's New voice - so
+    /// the editor's keys are not its own. The tool cards are not sheets:
+    /// the timeline is worked beside them.
     pub fn sheet_open(&self) -> bool {
         self.export.open
             || self.settings.open
             || self.project_sheet.open
             || self.relink.open
             || self.confirm.is_some()
+            || self.speech.new_voice.open
     }
 
     // ── notices ──
@@ -9998,6 +10238,7 @@ impl Studio {
             .as_ref()
             .filter(|source| source.kind != model::MediaKind::Audio);
         editor.set_has_picture(source.is_some() || showing.is_some());
+        editor.set_see_through(self.project().active().video.canvas[3] < 255);
         editor.set_preview_clip_name(
             source
                 .map(|source| source.name.as_str())
@@ -10110,6 +10351,7 @@ impl Studio {
         editor.set_tool(self.lanes.tool);
         editor.set_snap(self.lanes.snap);
         editor.set_magnetic(self.prefs.magnetic());
+        editor.set_linkage(self.timeline().linkage);
         editor.set_trim_follow(self.prefs.trim_follow);
         editor.set_meters_shown(self.prefs.meters_shown());
         editor.set_preview_axis(self.prefs.preview_axis);
@@ -11381,7 +11623,23 @@ impl Studio {
             .font_families()
             .iter()
             .position(|family| family.eq_ignore_ascii_case(text.font_family.trim_matches('"')));
-        let fill = colour_of(&text.color);
+        // Some words selected in the text box: the typography controls
+        // style those words, so they show what the first of them wears -
+        // a run's override where it has one, the title's look elsewhere.
+        let words = self.styled_words().filter(|(id, _, _)| *id == clip.id);
+        let look = words
+            .as_ref()
+            .map(|(_, start, _)| text.run_style_at(*start))
+            .unwrap_or_default();
+        let words_styled = words.as_ref().is_some_and(|(_, start, end)| {
+            text.runs
+                .iter()
+                .any(|run| run.start < *end && *start < run.end)
+        });
+        let fill = look
+            .color
+            .as_deref()
+            .map_or_else(|| colour_of(&text.color), colour_of);
         let stroke = colour_of(&text.stroke_color);
         let plate = colour_of(&text.background);
         let analysis = clip.cutout.as_ref().and_then(|cutout| {
@@ -11500,9 +11758,19 @@ impl Studio {
             family_row: family_row.unwrap_or(0) as i32,
             font_missing: family_row.is_none()
                 && !text.font_family.trim_matches('"').trim().is_empty(),
-            font_size: text.font_size as f32,
-            font_weight: text.font_weight as f32,
-            italic: text.italic,
+            font_size: (text.font_size * look.font_scale.unwrap_or(1.0)) as f32,
+            font_weight: look.font_weight.unwrap_or(text.font_weight) as f32,
+            italic: look.italic.unwrap_or(text.italic),
+            underline: look.underline.unwrap_or(text.underline),
+            strikethrough: look.strikethrough.unwrap_or(text.strikethrough),
+            styling_words: words.is_some(),
+            words_styled,
+            text_case: match text.text_case {
+                model::TextCase::Original => 0,
+                model::TextCase::Upper => 1,
+                model::TextCase::Lower => 2,
+                model::TextCase::Sentence => 3,
+            },
             fill,
             fill_hex: hex_of(fill).into(),
             align: align_of(text.align),
@@ -12149,6 +12417,7 @@ impl Studio {
             self.speech.sample_detail_rows(self),
         );
         app.set_speech(self.speech.data(self));
+        app.set_new_voice(self.speech.new_voice_data());
         // The Audio page.
         sync(&models.sounds_mine, self.sounds.mine());
         sync(&models.sounds_concat, self.sounds.concat_rows());
@@ -12768,6 +13037,17 @@ impl Studio {
                     checkable: true,
                     checked: self.prefs.magnetic(),
                 },
+                MenuItemData {
+                    id: "linkage".into(),
+                    label: t("common.linkage").into(),
+                    kind: MenuRow::Action,
+                    glyph: Glyph::None,
+                    shortcut: "".into(),
+                    enabled: true,
+                    danger: false,
+                    checkable: true,
+                    checked: self.timeline().linkage,
+                },
             ],
             2 => vec![
                 row(
@@ -12801,6 +13081,20 @@ impl Studio {
                     t("common.goToEnd"),
                     Glyph::SkipForward,
                     &keymap::label(&self.prefs, "end"),
+                    true,
+                ),
+                row(
+                    "prev-edit",
+                    t("shortcuts.prevEdit"),
+                    Glyph::None,
+                    &keymap::label(&self.prefs, "prev-edit"),
+                    true,
+                ),
+                row(
+                    "next-edit",
+                    t("shortcuts.nextEdit"),
+                    Glyph::None,
+                    &keymap::label(&self.prefs, "next-edit"),
                     true,
                 ),
             ],
@@ -13755,6 +14049,29 @@ pub(crate) fn audio_specs(clips: &[concat_export::ExportClip]) -> Vec<ClipSpec> 
     concat_host::playback::audible(clips)
 }
 
+/// The edit point beside `playhead` among the `(start, duration)` spans,
+/// the origin and the last span's end: the nearest after it when
+/// `forward`, before it otherwise, and `playhead` itself when there is
+/// none that way. Counted in whole frames at `rate`, so a playhead parked
+/// on a cut is on it and the next press goes on to the one beyond,
+/// however the seconds round.
+fn edit_point(spans: &[(f64, f64)], playhead: f32, rate: f32, forward: bool) -> f32 {
+    let fps = f64::from(rate.round().max(1.0));
+    let frame = |seconds: f64| (seconds * fps).round() as i64;
+    let here = frame(f64::from(playhead));
+    let points = spans
+        .iter()
+        .flat_map(|&(start, duration)| [start, start + duration])
+        .chain([0.0])
+        .map(frame);
+    let next = if forward {
+        points.filter(|&point| point > here).min()
+    } else {
+        points.filter(|&point| point < here).max()
+    };
+    next.map_or(playhead, |point| (point as f64 / fps) as f32)
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
@@ -13762,6 +14079,41 @@ mod tests {
         custom_rate, fps_of, grading_rows, home_folder, key_commands, packed, place_in, shown,
         wheel_partners, write_keyable,
     };
+
+    /// Up and Down walk the cuts on every lane in order, a playhead a
+    /// hair off a cut by rounding counts as on it, and past the last cut
+    /// (or before the first) the playhead stays where it is.
+    #[test]
+    fn the_edit_points_are_walked_in_order_across_lanes() {
+        // One lane: 0-2, 2-5. Another: 1-3.
+        let spans = [(0.0, 2.0), (2.0, 3.0), (1.0, 2.0)];
+        let walk = |from: f32, forward: bool| super::edit_point(&spans, from, 30.0, forward);
+        assert_eq!(walk(0.0, true), 1.0);
+        assert_eq!(walk(1.0, true), 2.0);
+        assert_eq!(walk(2.0, true), 3.0);
+        assert_eq!(walk(3.0, true), 5.0);
+        assert_eq!(walk(5.0, true), 5.0);
+        assert_eq!(walk(5.0, false), 3.0);
+        assert_eq!(walk(0.5, false), 0.0);
+        assert_eq!(walk(0.0, false), 0.0);
+        // A thousandth of a second past the cut at 2 is that cut's frame.
+        assert_eq!(walk(2.001, true), 3.0);
+        assert_eq!(walk(2.001, false), 1.0);
+    }
+
+    /// A text box's caret counts bytes and a run counts characters: an
+    /// accented letter is one character of two bytes, an offset inside a
+    /// character counts it, and one out of the text is held to it.
+    #[test]
+    fn a_caret_byte_is_the_character_it_falls_at() {
+        let text = "été ok";
+        assert_eq!(super::char_at(text, 0), 0);
+        assert_eq!(super::char_at(text, 2), 1, "after é");
+        assert_eq!(super::char_at(text, 1), 1, "inside é");
+        assert_eq!(super::char_at(text, text.len() as i32), 6);
+        assert_eq!(super::char_at(text, 1000), 6);
+        assert_eq!(super::char_at(text, -1), 0);
+    }
 
     /// Every built-in picture package ships a card, decodable at the size
     /// cards are drawn: one added without running scripts/bundle-cards.sh

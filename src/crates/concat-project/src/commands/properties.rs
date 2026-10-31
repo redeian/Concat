@@ -93,6 +93,54 @@ pub(super) fn apply(
             })
         }
 
+        Command::StyleTextRange {
+            clip_id,
+            start,
+            end,
+            patch,
+        } => {
+            let Some(clip) = project.active_mut().clip_mut(&clip_id) else {
+                return Ok(Outcome::default());
+            };
+            if clip.kind != ClipKind::Text {
+                return Ok(Outcome::default());
+            }
+            let Some(text) = clip.text.as_mut() else {
+                return Ok(Outcome::default());
+            };
+            let before = text.runs.clone();
+            text.style_range(start, end, &patch);
+            Ok(Outcome {
+                created_id: None,
+                applied: text.runs != before,
+            })
+        }
+
+        Command::ClearTextStyles {
+            clip_id,
+            start,
+            end,
+        } => {
+            let Some(clip) = project.active_mut().clip_mut(&clip_id) else {
+                return Ok(Outcome::default());
+            };
+            if clip.kind != ClipKind::Text {
+                return Ok(Outcome::default());
+            }
+            let Some(text) = clip.text.as_mut() else {
+                return Ok(Outcome::default());
+            };
+            let before = text.runs.clone();
+            match (start, end) {
+                (Some(start), Some(end)) => text.clear_range(start, end),
+                _ => text.runs.clear(),
+            }
+            Ok(Outcome {
+                created_id: None,
+                applied: text.runs != before,
+            })
+        }
+
         Command::SetClipSpeed {
             clip_id,
             speed,
@@ -449,6 +497,7 @@ fn make_room(timeline: &mut Timeline, clip_id: &str, old_end: f64, ripple: bool)
     let moved = start + duration - old_end;
     let pushed = moved > 0.0 && !timeline.is_free(&track_id, start, duration, &[clip_id]);
     if (ripple && moved != 0.0) || pushed {
+        let main = timeline.background_lane().map(str::to_owned);
         for other in timeline.clips_where(|other| {
             other.id != clip_id
                 && other.track_id == track_id
@@ -456,5 +505,16 @@ fn make_room(timeline: &mut Timeline, clip_id: &str, old_end: f64, ripple: bool)
         }) {
             other.start = (other.start + moved).max(0.0);
         }
+        // Linkage: sped up, the clip gave back the end of its old span;
+        // slowed down, it put more in at its old end.
+        let ripple = if moved < 0.0 {
+            clips::Ripple::Removed(vec![(old_end + moved, old_end)])
+        } else {
+            clips::Ripple::Inserted {
+                at: old_end,
+                length: moved,
+            }
+        };
+        clips::follow_main(timeline, main.as_deref(), &track_id, ripple);
     }
 }

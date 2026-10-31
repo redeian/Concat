@@ -279,11 +279,14 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
         // https://github.com/jub0t/Concat/issues/437
         || {
             let terminating = std::cell::Cell::new(false);
+            // Whether the studio was free to borrow: `stop_exports` borrows it.
+            let free = std::cell::Cell::new(false);
             Shell::with(|shell, _| {
                 let Ok(mut studio) = shell.studio.try_borrow_mut() else {
                     log::warn!("close: app terminating mid-edit; project not saved");
                     return;
                 };
+                free.set(true);
                 if studio.session.is_some() {
                     log::info!("close: app terminating");
                     terminating.set(true);
@@ -293,8 +296,19 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
                 }
             });
             // What `run` returning would have done next, had it returned.
-            if terminating.get() {
+            if terminating.get() || (cfg!(target_os = "macos") && free.get()) {
                 stop_exports();
+            }
+            // On a Mac the process ends here, by every road. Past this
+            // hook, ⌘Q's terminate calls `exit`, and `exit` runs the C++
+            // libraries' static destructors under the threads still
+            // running: whisper's, with a model loaded since the first
+            // caption, asserts its Metal buffers were all freed and aborts
+            // ("concat quit unexpectedly"). See `leave`.
+            #[cfg(target_os = "macos")]
+            {
+                log::info!("close: event loop exiting; leaving");
+                leave(0);
             }
         },
     )?;
@@ -739,6 +753,14 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
     app.on_start_browse(on_window!(|state| {
         state.handle(Msg::Start(StartMsg::Browse));
     }));
+    app.on_start_canvas_changed(on_window!(|state, colour: slint::Color| {
+        state.handle(Msg::Start(StartMsg::CanvasChanged([
+            colour.red(),
+            colour.green(),
+            colour.blue(),
+            colour.alpha(),
+        ])));
+    }));
     app.on_start_create(on_window!(|state| {
         state.handle(Msg::Start(StartMsg::Create));
     }));
@@ -933,6 +955,12 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
     editor.on_media_activate(on_window!(|state, id: i32| {
         state.place_at_playhead(&format!("media:{id}"));
     }));
+    editor.on_media_add_picked(on_window!(|state, at_end: bool| {
+        state.handle(Msg::Media(MediaMsg::AddPicked { at_end }));
+    }));
+    editor.on_media_clear_picks(on_window!(|state| {
+        state.handle(Msg::Media(MediaMsg::ClearPicks));
+    }));
     editor.on_library_add_text(on_window!(|state, preset: SharedString| {
         state.place_at_playhead(&format!("text:{preset}:Title"));
     }));
@@ -1066,6 +1094,9 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
     }));
     editor.on_magnetic_changed(on_window!(|state, on: bool| {
         state.handle(Msg::Timeline(TimelineMsg::MagneticChanged(on)));
+    }));
+    editor.on_linkage_changed(on_window!(|state, on: bool| {
+        state.handle(Msg::Timeline(TimelineMsg::LinkageChanged(on)));
     }));
     editor.on_trim_follow_changed(on_window!(|state, on: bool| {
         state.handle(Msg::Timeline(TimelineMsg::TrimFollowChanged(on)));
@@ -1372,6 +1403,15 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
             state.clip_set_text(field, value.as_str());
         }
     ));
+    editor.on_clip_set_words(on_lanes!(|state, text: SharedString, caret: i32| {
+        state.clip_set_words(text.as_str(), caret);
+    }));
+    editor.on_clip_select_words(on_lanes!(|state, anchor: i32, cursor: i32| {
+        state.select_words(anchor, cursor);
+    }));
+    editor.on_clip_reset_words(on_lanes!(|state| {
+        state.reset_words();
+    }));
     editor.on_clip_set_colour(on_lanes!(
         |state, field: ClipTextField, value: slint::Color| {
             state.clip_set_colour(field, value);
@@ -1512,7 +1552,57 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
         sounds.on_voice_remove(on_window!(|state, id: SharedString| {
             state.forget_voice(id.as_str());
         }));
+        // Import voice: a recording from the system's picker, sound or
+        // video, and the New voice sheet on the first one picked.
+        sounds.on_voice_import(|| {
+            host::pick_files_then(
+                i18n::t("voices.importVoice"),
+                Some((
+                    i18n::t("voices.recordings"),
+                    &concat_host::voices::RECORDING_EXTENSIONS,
+                )),
+                |studio, _, _, paths| {
+                    if let Some(path) = paths.into_iter().next() {
+                        studio.handle(Msg::Speech(SpeechMsg::ImportVoice(path)));
+                    }
+                },
+            );
+        });
     }
+    // The New voice sheet: the recording's name, a line about it, where
+    // in it the voice is kept from, a picture through the same picker as
+    // Text to speech's, and the save.
+    app.on_new_voice_closed(on_window!(|state| {
+        state.handle(Msg::Speech(SpeechMsg::NewVoiceClose));
+    }));
+    app.on_new_voice_name_edited(on_window!(|state, name: SharedString| {
+        state.handle(Msg::Speech(SpeechMsg::NewVoiceNameEdited(name.to_string())));
+    }));
+    app.on_new_voice_description_edited(on_window!(|state, text: SharedString| {
+        state.handle(Msg::Speech(SpeechMsg::NewVoiceDescriptionEdited(
+            text.to_string(),
+        )));
+    }));
+    app.on_new_voice_start_changed(on_window!(|state, seconds: f32| {
+        state.handle(Msg::Speech(SpeechMsg::NewVoiceStartChanged(seconds)));
+    }));
+    app.on_new_voice_pick_picture(|| {
+        host::pick_files_then(
+            i18n::t("speech.picture"),
+            Some((
+                i18n::t("speech.picture"),
+                &concat_host::voices::PICTURE_EXTENSIONS,
+            )),
+            |studio, _, _, paths| {
+                if let Some(path) = paths.into_iter().next() {
+                    studio.handle(Msg::Speech(SpeechMsg::NewVoicePicturePicked(path)));
+                }
+            },
+        );
+    });
+    app.on_new_voice_save(on_window!(|state| {
+        state.handle(Msg::Speech(SpeechMsg::NewVoiceSave));
+    }));
     // Text to speech keeps the sample it reads in as a voice of the
     // user's own, with a name and a picture.
     app.on_speech_save_name_edited(on_window!(|state, name: SharedString| {
@@ -1698,8 +1788,8 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
     app.global::<Focus>()
         .on_release(|| Shell::with(|_, app| app.invoke_blur()));
     editor.on_shortcut(move |action: SharedString| match action.as_str() {
-        "import" | "export" | "settings" | "zoom-in" | "zoom-out" | "start" | "end" | "snap"
-        | "magnetic" | "pan" | "preview-axis" => {
+        "import" | "export" | "settings" | "zoom-in" | "zoom-out" | "start" | "end"
+        | "prev-edit" | "next-edit" | "snap" | "magnetic" | "linkage" | "pan" | "preview-axis" => {
             Shell::with(|_, app| app.invoke_app_menu_selected(action.clone()));
         }
         _ => Shell::with(|shell, app| {
@@ -1821,7 +1911,8 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
                 // menu's own handler, so the key and the row cannot come
                 // apart — the same door on_shortcut keeps open.
                 "save" | "undo" | "redo" | "import" | "export" | "settings" | "zoom-in"
-                | "zoom-out" | "start" | "end" | "snap" | "pan" | "preview-axis" | "delete" => {
+                | "zoom-out" | "start" | "end" | "prev-edit" | "next-edit" | "snap" | "pan"
+                | "preview-axis" | "delete" => {
                     app.invoke_app_menu_selected(SharedString::from(action));
                 }
                 // The rest: the editor's own table, the way the phone's
@@ -1854,6 +1945,14 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
     }));
     app.on_project_color_space_changed(on_window!(|state, index: i32| {
         state.handle(Msg::Project(ProjectMsg::ColorSpaceChanged(index)));
+    }));
+    app.on_project_canvas_changed(on_window!(|state, colour: slint::Color| {
+        state.handle(Msg::Project(ProjectMsg::CanvasChanged([
+            colour.red(),
+            colour.green(),
+            colour.blue(),
+            colour.alpha(),
+        ])));
     }));
     app.on_project_custom_width_edited(on_window!(|state, width: f32| {
         state.handle(Msg::Project(ProjectMsg::CustomWidth(width)));
@@ -2119,6 +2218,12 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
     app.on_model_remove(on_window!(|state, id: SharedString| {
         state.handle(Msg::Settings(SettingsMsg::ModelRemove(id.to_string())));
     }));
+    app.on_model_open_link(on_window!(|state, id: SharedString| {
+        state.handle(Msg::Settings(SettingsMsg::ModelOpenLink(id.to_string())));
+    }));
+    app.on_model_choose_file(on_window!(|state, id: SharedString| {
+        state.handle(Msg::Settings(SettingsMsg::ModelChooseFile(id.to_string())));
+    }));
 
     // ── the tray's sound and word tools ──
     // The tray's panel buttons are toggles: a press opens the panel, or
@@ -2307,6 +2412,10 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
                             state.handle(Msg::Timeline(TimelineMsg::PreviewAxisChanged(on)))
                         }
                         "magnetic" => state.handle(Msg::Timeline(TimelineMsg::MagneticToggled)),
+                        "linkage" => {
+                            let on = !state.timeline().linkage;
+                            state.handle(Msg::Timeline(TimelineMsg::LinkageChanged(on)))
+                        }
                         "sort-added" => state.handle(Msg::Media(MediaMsg::SortChanged(0))),
                         "sort-name" => state.handle(Msg::Media(MediaMsg::SortChanged(1))),
                         "sort-kind" => state.handle(Msg::Media(MediaMsg::SortChanged(2))),
@@ -2320,6 +2429,11 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
                             state.pause();
                             let end = state.duration();
                             state.seek(end);
+                        }
+                        edit @ ("prev-edit" | "next-edit") => {
+                            state.pause();
+                            let at = state.edit_point(edit == "next-edit");
+                            state.seek(at);
                         }
                         "delete" => state.delete_selected(),
                         // The selected clips, as the tray's button splits, or
@@ -2783,9 +2897,16 @@ pub fn draw_in_software() {
 /// would have had the same crash. Nothing those handlers do is anything
 /// a closing app needs: the log is flushed here, and the files a project
 /// writes are written before the window closes.
+///
+/// On a Mac too, for the C++ libraries' static destructors: whisper.cpp's
+/// Metal device is a static whose destructor asserts that every Metal
+/// buffer was freed, and the model a caption loaded stays loaded for the
+/// rest of the run - so a quit after any transcription died of SIGABRT in
+/// `exit`, and macOS said Concat had quit unexpectedly. macOS ends an app
+/// that way itself when it opts into sudden termination.
 fn leave(code: i32) -> ! {
     log::logger().flush();
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     {
         use std::io::Write;
         let _ = std::io::stdout().flush();
@@ -2794,7 +2915,7 @@ fn leave(code: i32) -> ! {
         // this one's is touched after it.
         unsafe { libc::_exit(code) }
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     std::process::exit(code);
 }
 
@@ -2873,7 +2994,7 @@ mod tests {
     #[test]
     fn a_failed_save_keeps_the_real_session_and_its_edit() {
         let scratch = Scratch::new("session");
-        let info = projects::create(&scratch.location(), "Closing", 1920, 1080, 30, 1)
+        let info = projects::create(&scratch.location(), "Closing", 1920, 1080, 30, 1, [0, 0, 0, 255])
             .expect("creates the project");
         let manifest = projects::manifest_path(Path::new(&info.path));
 
@@ -2951,7 +3072,7 @@ mod tests {
     #[test]
     fn a_delayed_autosave_cannot_replace_the_close_snapshot() {
         let scratch = Scratch::new("ordered-close");
-        let info = projects::create(&scratch.location(), "Ordered", 1920, 1080, 30, 1)
+        let info = projects::create(&scratch.location(), "Ordered", 1920, 1080, 30, 1, [0, 0, 0, 255])
             .expect("creates the project");
         let mut session = Session::open_info(&info).expect("opens the session");
         let (old_path, old_document) = session.prepare_save(None);

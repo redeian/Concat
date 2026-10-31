@@ -97,6 +97,11 @@ export global Editor {
     callback media-remove(id: int);
     callback media-remove-selected();
     callback media-activate(id: int);
+    /// The phone's Add: what is picked, in the order it was picked, onto
+    /// the main lane at the playhead - or after its last clip, `at-end`.
+    callback media-add-picked(at-end: bool);
+    /// The phone's Media sheet opened: nothing is picked yet.
+    callback media-clear-picks();
     /// Right-click on a card in the bin: Rust fills `menu-items` for the
     /// file and bumps `menu-token`, the same round trip as `clip-context`.
     callback media-context(id: int);
@@ -166,6 +171,13 @@ export global Editor {
     in-out property <[string]> audio-tracks;
     callback clip-set(field: ClipField, value: float);
     callback clip-set-text(field: ClipTextField, value: string);
+    /// A title's words as typed, and the caret's byte after the edit.
+    callback clip-set-words(text: string, caret: int);
+    /// The Text tab's box selected some of a title's words (or none, when
+    /// anchor and cursor meet): the bytes either end of the selection.
+    callback clip-select-words(anchor: int, cursor: int);
+    /// The selected words back in the title's own look.
+    callback clip-reset-words();
     callback clip-set-colour(field: ClipTextField, value: color);
     callback clip-commit();
     /// The families a title can be set in: the bundled face, the user's
@@ -256,6 +268,10 @@ export global Editor {
     /// The engine's composited frame at the playhead, or an empty image
     /// while one is on its way. Set from Rust; see `Studio::request_preview`.
     in-out property <image> preview-frame;
+    /// The timeline's canvas lets something show through (#456): the
+    /// monitor draws a checker under the frame, so what is clear reads as
+    /// clear rather than as the stage's black.
+    in-out property <bool> see-through;
 
     callback play-toggled();
     callback seek(seconds: float);
@@ -341,6 +357,9 @@ export global Editor {
     /// leave. A remembered preference, which Rust owns; the tray's button
     /// and the Settings switch both show it.
     in-out property <bool> magnetic;
+    /// Linkage: the other lanes follow an edit that closes up or opens
+    /// the main one. The active timeline's, which Rust owns.
+    in-out property <bool> linkage: true;
     /// Hand tool: wheel and drag pan time instead of scrolling the stack.
     in-out property <bool> pan-mode: false;
     /// Trim follow: the playhead rides a clip edge while it is dragged. A
@@ -392,6 +411,7 @@ export global Editor {
     callback tool-changed(tool: TimelineTool);
     callback snap-changed(snap: bool);
     callback magnetic-changed(on: bool);
+    callback linkage-changed(on: bool);
     callback pan-changed(on: bool);
     callback trim-follow-changed(on: bool);
     callback meters-shown-changed(on: bool);

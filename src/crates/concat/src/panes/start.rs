@@ -34,6 +34,8 @@ pub enum StartMsg {
     CustomWidth(f32),
     CustomHeight(f32),
     CustomFps(f32),
+    /// What shows where no picture covers the frame, `[r, g, b, a]`.
+    CanvasChanged([u8; 4]),
     DismissError,
     /// Pick where the project folder goes.
     Browse,
@@ -135,6 +137,9 @@ pub struct StartPane {
     pub custom_size: (u32, u32),
     /// The custom rate, as an exact fraction.
     pub custom_rate: (i64, i64),
+    /// What shows where no picture covers the frame (#456): black, as
+    /// every project before it had.
+    pub canvas: [u8; 4],
     pub busy: bool,
     pub error: String,
     /// The projects' search, as typed; empty shows them all.
@@ -160,6 +165,7 @@ impl Default for StartPane {
             rate: 3,
             custom_size: (1920, 1080),
             custom_rate: (30, 1),
+            canvas: [0, 0, 0, 255],
             busy: false,
             error: String::new(),
             query: String::new(),
@@ -285,6 +291,7 @@ impl StartPane {
                 self.custom_size = custom_frame(self.custom_size.0 as f32, height);
             }
             StartMsg::CustomFps(fps) => self.custom_rate = custom_rate(f64::from(fps)),
+            StartMsg::CanvasChanged(canvas) => self.canvas = canvas,
             StartMsg::DismissError => self.error.clear(),
             // The picker runs with the studio unborrowed and answers as a
             // message of its own; see `host::after_dialog`.
@@ -406,7 +413,7 @@ impl StartPane {
             self.error = t("start.chooseWhereProjectFolder");
             return;
         }
-        let opened = projects::create(&self.location, &name, width, height, num, den)
+        let opened = projects::create(&self.location, &name, width, height, num, den, self.canvas)
             .and_then(|info| studio.open_project(info));
         self.busy = false;
         match opened {
@@ -520,6 +527,7 @@ impl StartPane {
             size: self.size as i32,
             rate: self.rate as i32,
             size_readout: format!("{width} x {height}").into(),
+            canvas: slint::Color::from_argb_u8(self.canvas[3], self.canvas[0], self.canvas[1], self.canvas[2]),
             custom_width: width as f32,
             custom_height: height as f32,
             custom_fps: fps_of(num, den) as f32,
@@ -590,6 +598,7 @@ mod tests {
     fn the_projects_search_and_sort() {
         let recent = |name: &str, path: &str| projects::Recent {
             info: projects::ProjectInfo {
+                canvas: [0, 0, 0, 255],
                 path: path.into(),
                 name: name.into(),
                 width: 1920,

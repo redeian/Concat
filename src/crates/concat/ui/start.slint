@@ -11,6 +11,7 @@ import { Tip } from "primitives/tooltip.slint";
 import { Focus } from "util.slint";
 import { NumberField } from "primitives/number-field.slint";
 import { Select } from "primitives/select.slint";
+import { CanvasPicker } from "dialogs/canvas-picker.slint";
 import { SegmentedControl } from "primitives/segmented-control.slint";
 
 // The launch screen: the app's home, and the window's own ground under all
@@ -139,6 +140,8 @@ export struct StartData {
     /// "30/1 fps" — the exact fraction, because 29.97 is 30000/1001 and
     /// never anything else.
     rate-readout: string,
+    /// What shows where no picture covers the frame (#456).
+    canvas: color,
     /// Creating. The button says so and everything is refused meanwhile.
     busy: bool,
     /// Non-empty puts up the notice above the button.
@@ -2180,6 +2183,7 @@ export component NewProjectDialog inherits Modal {
     callback custom-width-edited(width: float);
     callback custom-height-edited(height: float);
     callback custom-fps-edited(fps: float);
+    callback canvas-changed(value: color);
     callback create();
     callback dismiss-error();
 
@@ -2326,6 +2330,9 @@ export component NewProjectDialog inherits Modal {
                     // A typed frame is its own shape.
                     enabled: !root.data.busy && root.data.size < root.sizes.length;
                     block: root.narrow;
+                    // Seven shapes are past a phone's width; four to a
+                    // row there, as the sizes wrap three.
+                    per-row: root.narrow ? 4 : 0;
                     changed(index) => { root.aspect-changed(index); }
                 }
 
@@ -2419,7 +2426,6 @@ export component NewProjectDialog inherits Modal {
 
         FormRow {
             label: I18n.upper("common.frameRate");
-            last: true;
             stacked: root.narrow;
 
             VerticalLayout {
@@ -2470,6 +2476,19 @@ export component NewProjectDialog inherits Modal {
                         changed(value) => { root.custom-fps-edited(value); }
                     }
                 }
+            }
+        }
+
+        // What shows where no picture covers the frame; see CanvasPicker.
+        FormRow {
+            label: I18n.upper("start.background");
+            last: true;
+            stacked: root.narrow;
+
+            CanvasPicker {
+                value: root.data.canvas;
+                enabled: !root.data.busy;
+                changed(value) => { root.canvas-changed(value); }
             }
         }
 

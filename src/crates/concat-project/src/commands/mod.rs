@@ -15,8 +15,8 @@ use serde::{Deserialize, Serialize};
 use crate::model::{
     AppliedFilter, AudioTrack, Background, Clip, ClipKind, ClipMask, ColorRange, ColorSpace, Crop,
     CustomFont, Cutout, CutoutMode, Enhanced, Framing, KeyEase, KeyProperty, MediaItem, MediaKind,
-    MediaOrigin, Project, ShapeStyle, SpeedPoint, Stabilize, Stroke, TextStyle, Timeline, Track,
-    Transition, VideoSettings,
+    MediaOrigin, Project, RunStyle, ShapeStyle, SpeedPoint, Stabilize, Stroke, TextStyle, Timeline,
+    Track, Transition, VideoSettings,
 };
 
 mod audio;
@@ -625,6 +625,11 @@ pub enum Command {
         /// one - ends the clip's Enhance, which was of the media now gone.
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         enhanced: bool,
+        /// With `enhanced`, the seconds into the original the copy starts
+        /// at (see [`crate::model::Enhanced::offset`]); `source_start` is
+        /// then the clip's in-point in the copy.
+        #[serde(default)]
+        offset: f64,
     },
     /// Shows a clip's enhanced copy, or its original again. A no-op for a
     /// clip Enhance has not made a copy for.
@@ -730,6 +735,38 @@ pub enum Command {
         clip_id: String,
         /// Which properties change, and to what.
         patch: ClipPatch,
+    },
+    /// Gives some of a title's words a look of their own: each field of
+    /// `patch` is laid over the characters `start..end` of its words, and
+    /// each it leaves out stays as it was there - the title's own look, or
+    /// what an earlier run gave them. `start` and `end` count characters
+    /// (Unicode scalar values), not bytes, and are clamped to the words; an
+    /// empty range, an empty patch, a clip that is not a title or an
+    /// unknown clip is a no-op. The title's own style is untouched, so the
+    /// words left out keep following it. See `TextStyle::runs`.
+    StyleTextRange {
+        /// The title.
+        clip_id: String,
+        /// The first character to style.
+        start: usize,
+        /// One past the last.
+        end: usize,
+        /// The overrides to lay over them.
+        patch: RunStyle,
+    },
+    /// Gives a title's words back to its own look: every run is cut out of
+    /// the characters `start..end`, or out of all of them when either end
+    /// is absent. Counted and clamped as in `styleTextRange`; a clip that
+    /// is not a title or an unknown clip is a no-op.
+    ClearTextStyles {
+        /// The title.
+        clip_id: String,
+        /// The first character, absent for the start of the words.
+        #[serde(default)]
+        start: Option<usize>,
+        /// One past the last, absent for the end of the words.
+        #[serde(default)]
+        end: Option<usize>,
     },
     /// Changes playback rate while holding the amount of source covered
     /// constant - the clip's timeline duration is what stretches, which is
@@ -847,6 +884,15 @@ pub enum Command {
         timeline_id: String,
         /// The background.
         background: Background,
+    },
+    /// Turns a timeline's linkage on or off: whether its other lanes follow
+    /// an edit that closes up or opens its main lane. See
+    /// `Timeline::linkage`.
+    SetTimelineLinkage {
+        /// The timeline. An unknown id is a no-op.
+        timeline_id: String,
+        /// On: the other lanes follow the main one.
+        on: bool,
     },
     /// Renames a timeline tab. Whitespace-only names are ignored so a tab
     /// can never end up blank; unknown ids are tolerated.
@@ -1147,8 +1193,17 @@ impl Command {
             Command::SplitClips { time, .. } => bad([*time]),
             Command::FreezeFrame { time, duration, .. } => bad([*time]) || bad(*duration),
             Command::ReplaceClipMedia {
-                item, source_start, ..
-            } => bad(item.duration) || bad(item.frame_rate) || bad(*source_start),
+                item,
+                source_start,
+                offset,
+                ..
+            } => {
+                bad(item.duration)
+                    || bad(item.frame_rate)
+                    || bad(*source_start)
+                    || bad([*offset])
+                    || *offset < 0.0
+            }
             Command::UpdateClip { patch, .. } => {
                 bad(patch.volume)
                     || bad(patch.fade_in)
@@ -1292,6 +1347,8 @@ pub fn apply(
         // CapyCut: the inspector's colour swatches for a shape.
         command @ Command::SetShapeStyle { .. } => shape::apply(project, mint, command),
         command @ (Command::UpdateClip { .. }
+        | Command::StyleTextRange { .. }
+        | Command::ClearTextStyles { .. }
         | Command::MatchClip { .. }
         | Command::SetClipSpeed { .. }
         | Command::SetClipCutout { .. }
@@ -1315,6 +1372,7 @@ pub fn apply(
         command @ (Command::AddTimeline
         | Command::SetTimelineVideo { .. }
         | Command::SetTimelineBackground { .. }
+        | Command::SetTimelineLinkage { .. }
         | Command::RemoveTimeline { .. }
         | Command::RenameTimeline { .. }
         | Command::SelectTimeline { .. }

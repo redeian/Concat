@@ -120,15 +120,15 @@ const KNOWN_MODELS: &[KnownModel] = &[
         id: "kokoro-int8-multi-lang-v1_0",
         label: "Kokoro (compact)",
         blurb: "The recommended build: same voices, a third of the download.",
-        approx_bytes: 132_303_094,
-        sha256: "4c3052abaa60943a341f193888cf6abd68787dae6ab8ae5c925a706caa247e4e",
+        approx_bytes: 132_353_410,
+        sha256: "72c347230107ef8a31098ec4d468a605244beef5f1ed00db97efa13518800653",
     },
     KnownModel {
         id: "kokoro-multi-lang-v1_0",
         label: "Kokoro (full precision)",
         blurb: "Bit-perfect weights for the skeptical; rarely audibly better.",
-        approx_bytes: 349_906_910,
-        sha256: "c5f7e2d2caf082bc1d20fb70334a61d99d20b484500aad32e7cf84c128ea3298",
+        approx_bytes: 349_886_476,
+        sha256: "60703707bc05ccd48d60e1eb723f38b07d6e474795a0b6a588d7220400e0f7a4",
     },
 ];
 
@@ -690,6 +690,20 @@ impl Speech {
         let _ = std::fs::remove_file(&archive);
         let _ = std::fs::remove_dir_all(&staging);
         result
+    }
+
+    /// What bundle `id` is called as a file, and every address a download
+    /// of it tries, in order; see [`crate::Transcriber::model_sources`].
+    /// `None` for one Concat does not know, and for Chatterbox, which is
+    /// several files rather than one.
+    pub fn model_sources(id: &str) -> Option<(String, Vec<String>)> {
+        known(id)?;
+        if family_of(id) == Family::Chatterbox {
+            return None;
+        }
+        let file = model_archive(id);
+        let sources = concat_host::models::sources(&file, &model_upstream(id));
+        Some((file, sources))
     }
 
     /// Asks the running download to stop. Idle is a harmless no-op.

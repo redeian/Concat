@@ -220,6 +220,10 @@ fn is_false(value: &bool) -> bool {
     !value
 }
 
+fn is_true(value: &bool) -> bool {
+    *value
+}
+
 /// A lane. Deliberately untyped: any media goes on any track.
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
@@ -778,6 +782,17 @@ impl Background {
 }
 
 /// `#rrggbb` (or `#rrggbbaa`, its alpha ignored) as three channels.
+/// `#rrggbb` (opaque) or `#rrggbbaa` as four straight channels.
+fn rgba_of(hex: &str) -> Option<[u8; 4]> {
+    let [r, g, b] = rgb_of(hex)?;
+    let digits = hex.trim().strip_prefix('#')?;
+    let a = match digits.len() {
+        8 => u8::from_str_radix(&digits[6..8], 16).ok()?,
+        _ => 255,
+    };
+    Some([r, g, b, a])
+}
+
 fn rgb_of(hex: &str) -> Option<[u8; 3]> {
     let digits = hex.trim().strip_prefix('#')?;
     if !(digits.len() == 6 || digits.len() == 8) || !digits.is_ascii() {
@@ -1314,6 +1329,18 @@ pub struct Enhanced {
     pub copy: String,
     /// Whether the clip shows the copy.
     pub on: bool,
+    /// Seconds into the original the copy starts at: a copy of the span the
+    /// clip covers, rather than of the whole file, starts partway in. The
+    /// clip's in-point is in the copy's seconds while it shows the copy, so
+    /// switching between the two moves it by this much and the same moment
+    /// stays on screen. Zero, and left out of the document, for a copy of
+    /// the whole file.
+    #[serde(default, skip_serializing_if = "is_zero_seconds")]
+    pub offset: f64,
+}
+
+fn is_zero_seconds(seconds: &f64) -> bool {
+    *seconds == 0.0
 }
 
 /// A transition on the cut into a clip.
@@ -1556,6 +1583,101 @@ impl Default for ShapeStyle {
     }
 }
 
+/// Display casing, independent of the editable source text.
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum TextCase {
+    /// Display all cased letters in uppercase.
+    Upper,
+    /// Display all cased letters in lowercase.
+    Lower,
+    /// Lowercase the text and capitalize sentence initials.
+    Sentence,
+    /// Preserve the editable source's capitalization.
+    #[default]
+    #[serde(other)]
+    Original,
+}
+
+/// What a stretch of a title's words wears over the title's own look: each
+/// field is an override, and one left out is the title's. Every word of a
+/// title is the title's style until a run says otherwise, so a title with
+/// no runs is exactly the title it always was.
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[derive(Clone, PartialEq, Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct RunStyle {
+    /// Fill colour as `#rrggbb`, over the title's `color`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+    /// CSS-scale weight, 100..=900, over the title's `fontWeight`; bold is
+    /// 700, regular 400.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub font_weight: Option<f64>,
+    /// Italic or upright, over the title's `italic`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub italic: Option<bool>,
+    /// Underlined or not, over the title's `underline`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub underline: Option<bool>,
+    /// Struck through or not, over the title's `strikethrough`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub strikethrough: Option<bool>,
+    /// Size as a multiple of the title's `fontSize`, 0.1..=10: 1.5 is half
+    /// as big again. Relative, not a size of its own, so a word made bigger
+    /// stays bigger by as much when the whole title is resized.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub font_scale: Option<f64>,
+    /// Outline colour, over the title's `strokeColor`; shows where the
+    /// title has an outline at all.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stroke_color: Option<String>,
+}
+
+impl RunStyle {
+    /// No override at all: the title's own look.
+    pub fn is_empty(&self) -> bool {
+        *self == RunStyle::default()
+    }
+
+    /// `over` laid on top of this one: what it says wins, what it leaves
+    /// out stays as this one has it.
+    pub fn and(&self, over: &RunStyle) -> RunStyle {
+        RunStyle {
+            color: over.color.clone().or_else(|| self.color.clone()),
+            font_weight: over.font_weight.or(self.font_weight),
+            italic: over.italic.or(self.italic),
+            underline: over.underline.or(self.underline),
+            strikethrough: over.strikethrough.or(self.strikethrough),
+            font_scale: over.font_scale.or(self.font_scale),
+            stroke_color: over
+                .stroke_color
+                .clone()
+                .or_else(|| self.stroke_color.clone()),
+        }
+    }
+}
+
+/// A stretch of a title's words with a look of its own: some words in
+/// another colour, one in bold. `start` and `end` count characters - Unicode
+/// scalar values, what `str::chars` yields - into the title's `content`,
+/// not bytes, so a caller in any language counts them the way it counts a
+/// string; `end` is one past the last. Kept sorted, apart and non-empty;
+/// see `TextStyle::style_range` and `TextStyle::edit_content`.
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[derive(Clone, PartialEq, Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TextRun {
+    /// The first character the look covers.
+    pub start: usize,
+    /// One past the last.
+    pub end: usize,
+    /// The look.
+    #[serde(flatten)]
+    pub style: RunStyle,
+}
+
 /// A title's styling. Sizes are fractions of the frame, so a title composed
 /// against 1080p lands correctly exported at 4K. A style arriving in a
 /// command needs only the fields it changes; the rest are the default's, so
@@ -1569,7 +1691,7 @@ pub struct TextStyle {
     /// snapshotted from the first non-empty line.
     pub content: String,
     /// CSS-style family name, quotes included where the name needs them,
-    /// e.g. `"Cabinet Grotesk"`. May name a [`CustomFont`] the user added.
+    /// e.g. `"Hanken Grotesk"`. May name a [`CustomFont`] the user added.
     pub font_family: String,
     /// Cap height as a fraction of frame height.
     pub font_size: f64,
@@ -1578,6 +1700,12 @@ pub struct TextStyle {
     pub font_weight: f64,
     /// Italic when true. A style flag, not a separate face.
     pub italic: bool,
+    /// Case is applied for painting; the editable source stays intact.
+    pub text_case: TextCase,
+    /// Draw an underline using the selected face's metrics.
+    pub underline: bool,
+    /// Draw a strike through the text using the selected face's metrics.
+    pub strikethrough: bool,
     /// Fill colour as a CSS hex string, e.g. "#ffffff".
     pub color: String,
     /// Line alignment within the block; see [`TextAlign`].
@@ -1629,9 +1757,24 @@ pub struct TextStyle {
     /// can be a band of a fixed size whatever is written on it.
     /// https://github.com/jub0t/Concat/issues/119
     pub max_height: f64,
+    /// Stretches of the words with a look of their own over the rest of
+    /// this style - a word in another colour, in bold, bigger. Empty for a
+    /// title in one look, and then not written at all, so a document
+    /// without runs is the document it always was and an older build reads
+    /// a document with them as the title in its own look.
+    #[serde(skip_serializing_if = "Vec::is_empty", deserialize_with = "wire::list")]
+    pub runs: Vec<TextRun>,
 }
 
 impl TextStyle {
+    /// The words as they are painted: the content in the style's case,
+    /// leaving the content itself - what is typed, saved and exported as
+    /// subtitles - as it was written. See [`TextStyle::display`] for the
+    /// runs that go with it.
+    pub fn display_content(&self) -> String {
+        self.display().0
+    }
+
     /// Every number pulled into the range a title can be drawn at: a
     /// hand-edited zero size would render an invisible title, and lines
     /// cannot collapse onto each other.
@@ -1653,6 +1796,7 @@ impl TextStyle {
             finite(self.background_padding_x, base.background_padding_x).max(0.0);
         self.background_padding_y =
             finite(self.background_padding_y, base.background_padding_y).max(0.0);
+        self.tidy_runs();
         self
     }
 }
@@ -1661,10 +1805,16 @@ impl Default for TextStyle {
     fn default() -> Self {
         Self {
             content: "Your text".to_owned(),
-            font_family: "\"Cabinet Grotesk\"".to_owned(),
+            // The face Concat ships (`concat_text::BUNDLED_FAMILY`), so a
+            // title made without one - by the API, a template, the agent -
+            // is drawn in it everywhere rather than in a fallback.
+            font_family: "Hanken Grotesk".to_owned(),
             font_size: 0.09,
             font_weight: 700.0,
             italic: false,
+            text_case: TextCase::Original,
+            underline: false,
+            strikethrough: false,
             color: "#ffffff".to_owned(),
             align: TextAlign::Center,
             opacity: 1.0,
@@ -1679,6 +1829,7 @@ impl Default for TextStyle {
             tracking: 0.0,
             max_width: 0.0,
             max_height: 0.0,
+            runs: Vec::new(),
         }
     }
 }
@@ -2525,6 +2676,14 @@ pub struct Timeline {
     /// [`Timeline::clip_mut`]). Reading through the `Arc` is transparent.
     #[serde(deserialize_with = "wire::list")]
     pub clips: Vec<Arc<Clip>>,
+    /// Linkage: whether the other lanes follow an edit that closes up or
+    /// opens the main lane ([`Timeline::background_lane`]), so a caption,
+    /// a title, an overlay or a sound placed against the footage stays on
+    /// the frames it was placed against. CapCut's Linkage, Final Cut's
+    /// connected clips. On unless turned off, and left out of the document
+    /// while on.
+    #[serde(default = "yes", skip_serializing_if = "is_true")]
+    pub linkage: bool,
     /// Fields this build does not know, kept so they round-trip.
     #[serde(flatten, default, skip_serializing_if = "Map::is_empty")]
     pub extra: Map<String, Value>,
@@ -2539,6 +2698,7 @@ impl Default for Timeline {
             background: Background::None,
             tracks: Vec::new(),
             clips: Vec::new(),
+            linkage: true,
             extra: Map::new(),
         }
     }
@@ -2600,6 +2760,74 @@ pub struct VideoSettings {
     #[serde(default, skip_serializing_if = "ColorSpace::is_sdr")]
     #[serde(deserialize_with = "wire::color_space")]
     pub color_space: ColorSpace,
+    /// What shows where no picture covers the frame - a gap, the space
+    /// around a title, a clip fading in - as straight `[r, g, b, a]`,
+    /// written `#rrggbb` in the document, or `#rrggbbaa` when it lets
+    /// something show through: opaque black unless the project was given
+    /// another (#456). Alpha zero is a transparent frame, for an overlay
+    /// exported in a format that keeps alpha; a format that does not
+    /// gets black there. Left out of the document while it is opaque
+    /// black, so those documents stay as they were.
+    #[serde(default = "opaque_black", skip_serializing_if = "is_black", with = "hex_rgba")]
+    #[cfg_attr(feature = "schema", schemars(with = "String"))]
+    pub canvas: [u8; 4],
+}
+
+/// The canvas every project had before it could be given one.
+pub const OPAQUE_BLACK: [u8; 4] = [0, 0, 0, 255];
+
+/// A canvas written as a bare array of channels, as the recents list and
+/// the export and preview requests carry it: `[r, g, b, a]`, or `[r, g, b]`
+/// as it was written before the canvas had an alpha, which is opaque. Any
+/// other shape is opaque black, so one odd entry does not lose the rest of
+/// what it is read with.
+pub fn rgba_array<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<[u8; 4], D::Error> {
+    let value = serde_json::Value::deserialize(deserializer)?;
+    let channels: Option<Vec<u8>> = value.as_array().and_then(|items| {
+        items
+            .iter()
+            .map(|item| item.as_u64().and_then(|n| u8::try_from(n).ok()))
+            .collect()
+    });
+    Ok(match channels.as_deref() {
+        Some(&[r, g, b]) => [r, g, b, 255],
+        Some(&[r, g, b, a]) => [r, g, b, a],
+        _ => OPAQUE_BLACK,
+    })
+}
+
+fn opaque_black() -> [u8; 4] {
+    OPAQUE_BLACK
+}
+
+fn is_black(rgba: &[u8; 4]) -> bool {
+    *rgba == OPAQUE_BLACK
+}
+
+/// A colour kept as four straight channels and written the way the
+/// document writes every colour: `#rrggbb` while it is opaque,
+/// `#rrggbbaa` when it is not. One that does not read is opaque black.
+pub mod hex_rgba {
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    /// `#rrggbb`, or `#rrggbbaa` short of opaque; lower case.
+    pub fn serialize<S: Serializer>(rgba: &[u8; 4], serializer: S) -> Result<S::Ok, S::Error> {
+        let [r, g, b, a] = *rgba;
+        serializer.serialize_str(&if a == 255 {
+            format!("#{r:02x}{g:02x}{b:02x}")
+        } else {
+            format!("#{r:02x}{g:02x}{b:02x}{a:02x}")
+        })
+    }
+
+    /// `#rrggbb` (opaque) or `#rrggbbaa`; opaque black for anything else.
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<[u8; 4], D::Error> {
+        let value = serde_json::Value::deserialize(deserializer)?;
+        Ok(value
+            .as_str()
+            .and_then(super::rgba_of)
+            .unwrap_or(super::OPAQUE_BLACK))
+    }
 }
 
 impl Default for VideoSettings {
@@ -2612,6 +2840,7 @@ impl Default for VideoSettings {
             rate_num: 30,
             rate_den: 1,
             color_space: ColorSpace::Sdr,
+            canvas: OPAQUE_BLACK,
         }
     }
 }
@@ -2663,6 +2892,7 @@ impl VideoSettings {
                 fallback.rate_den
             },
             color_space: self.color_space,
+            canvas: self.canvas,
         }
     }
 
@@ -2758,6 +2988,7 @@ impl Project {
                     })
                     .collect(),
                 clips: Vec::new(),
+                linkage: true,
                 extra: Map::new(),
             })],
             active_timeline_id: "TL1".to_owned(),
