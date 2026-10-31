@@ -412,7 +412,11 @@ fn text(bytes: &[u8]) -> String {
 }
 
 /// What the tests of this crate share.
-#[cfg(test)]
+///
+/// Gated exactly as the only thing that uses it - the CoreML probe below
+/// (`target_vendor = "apple"`), so on Linux the re-export is not merely unused
+/// but absent, which is what CI's `-D warnings` asks for.
+#[cfg(all(test, feature = "infer", target_vendor = "apple"))]
 pub(crate) mod tests_support {
     pub(crate) use super::tests::fetched_model;
 }
