@@ -38,7 +38,9 @@ fn main() -> Result<(), String> {
     println!("model installed: {}", service.installed());
 
     let factor = 2;
-    let target = target_for(&project, &media, factor, DEFAULT_STRENGTH, false)
+    // The whole file: `None` span, which is what this probe covers. A clip in
+    // the window names the span it shows, so its copy is only that span.
+    let target = target_for(&project, &media, factor, DEFAULT_STRENGTH, false, None)
         .ok_or_else(|| "the file cannot be read, so it cannot be enhanced".to_owned())?;
     println!("copy goes to: {}", target.display());
 
@@ -48,6 +50,7 @@ fn main() -> Result<(), String> {
         factor,
         strength: DEFAULT_STRENGTH,
         target: target.clone(),
+        span: None,
     };
     let started = std::time::Instant::now();
     let mut announced = 0u32;
