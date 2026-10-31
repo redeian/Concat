@@ -8834,7 +8834,17 @@ impl Studio {
                 self.notify(&error, true);
                 return;
             }
-            let path = format!("{project_path}/cache/{key}");
+            // The path `write_artwork` actually wrote, which is built with
+            // `Path::join`: a `{folder}/cache/…` string spelled the same file
+            // with a '/' here and a '\\' after a project was reopened on
+            // Windows, and the two are only equal as paths, not as strings.
+            let path = match media::artwork_file(&project_path, &key) {
+                Ok(file) => file.to_string_lossy().into_owned(),
+                Err(error) => {
+                    self.notify(&error, true);
+                    return;
+                }
+            };
             match media::probe(&path) {
                 Ok(summary) => Some(summary.to_new_media()),
                 Err(error) => {

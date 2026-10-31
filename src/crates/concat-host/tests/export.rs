@@ -1549,7 +1549,12 @@ fn every_edit_still_exports() {
     .expect("encodes the freeze");
     media::write_artwork(studio.session.path(), "freeze-test.jpg", &frozen)
         .expect("writes the freeze");
-    let frozen_path = format!("{}/cache/freeze-test.jpg", studio.session.path());
+    // The path the window itself would name, which is `Path::join`'s: a
+    // `{folder}/cache/…` string differs from what a reopen produces on Windows.
+    let frozen_path = media::artwork_file(studio.session.path(), "freeze-test.jpg")
+        .expect("names the freeze")
+        .to_string_lossy()
+        .into_owned();
     let frozen_media = media::probe(&frozen_path)
         .expect("probes the freeze")
         .to_new_media();
