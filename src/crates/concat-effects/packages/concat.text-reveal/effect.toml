@@ -4,7 +4,12 @@ format = 2
 id = "concat.text-reveal"
 name = "Word Reveal"
 kind = "effect"
-category = "Type"
+# "Text" is the category the card painter draws over a title rather than over
+# the bare still (cards.rs), which is the only plate this effect has anything
+# to do on: it multiplies a title's per-word alpha, and a clip with no word map
+# comes back unchanged. The effects shelf groups by this name, so it reads as
+# a shelf of its own.
+category = "Text"
 order = 1
 intensity = "progress"
 description = "A title arrives one word at a time, in reading order, each fading in where it belongs. Key Progress from 0 to 1 across the clip to run it; on a clip that is not a title it does nothing."
@@ -33,6 +38,12 @@ key = "progress"
 from = 0.0
 to = 1.0
 until = 0.7
+
+# The card shows the reveal under way, not at either end: at the default
+# Progress of 1 every word is already in place, so the card would be a title
+# like any other and the shelf would show nothing of what this does.
+[card]
+params = { progress = 0.45 }
 
 [wgsl]
 entry = "effect.wgsl"
